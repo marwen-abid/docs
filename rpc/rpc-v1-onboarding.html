@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stellar RPC — Developer Field Guide</title>
+<style>
+  :root {
+    --paper:#faf8f3;
+    --surface:#ffffff;
+    --surface-2:#f4f1e9;
+    --ink:#15161b;
+    --ink-soft:#23262f;
+    --text:#222530;
+    --muted:#5e6573;
+    --faint:#8a909c;
+    --border:#e7e1d3;
+    --border-strong:#d8d1bf;
+    --gold:#c07d12;
+    --gold-soft:#f6ecd6;
+    --go:#0a86a8;
+    --go-soft:#e2f3f8;
+    --rust:#bb4216;
+    --rust-soft:#f7e7df;
+    --indigo:#4338ca;
+    --green:#1f7a43;
+    --green-soft:#e4f1e8;
+    --shadow:0 1px 2px rgba(20,22,27,.04), 0 8px 24px -12px rgba(20,22,27,.18);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body {
+    margin:0; background:var(--paper); color:var(--text);
+    font-family:var(--sans); font-size:16px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  a { color:var(--indigo); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+
+  /* ---------- Layout ---------- */
+  .shell { display:grid; grid-template-columns:300px minmax(0,1fr); }
+  nav.side {
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    background:var(--ink); color:#cfd3dc; padding:30px 22px 60px;
+    border-right:1px solid #000;
+  }
+  main { max-width:1000px; margin:0 auto; padding:64px 56px 140px; width:100%; }
+  @media (max-width:980px){
+    .shell { grid-template-columns:1fr; }
+    nav.side { position:fixed; z-index:50; width:300px; transform:translateX(-101%); transition:transform .25s ease; box-shadow:0 0 60px rgba(0,0,0,.4); }
+    nav.side.open { transform:translateX(0); }
+    main { padding:72px 22px 120px; }
+    .menu-btn { display:flex !important; }
+    .scrim { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40; }
+    .scrim.show { display:block; }
+  }
+
+  /* ---------- Sidebar ---------- */
+  .brand { display:flex; align-items:center; gap:11px; margin-bottom:6px; }
+  .brand .dot { width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,var(--gold),#e9b44a); display:grid; place-items:center; color:#241a05; font-weight:800; font-family:var(--mono); font-size:15px; flex:none; }
+  .brand h2 { font-size:15px; margin:0; color:#fff; font-weight:700; letter-spacing:.2px; }
+  .brand .sub { font-size:11px; color:#7f8696; font-family:var(--mono); letter-spacing:.3px; text-transform:uppercase; }
+  nav.side .toc { margin-top:26px; }
+  nav.side .grp { font-size:10.5px; text-transform:uppercase; letter-spacing:1.4px; color:#6b7283; margin:22px 0 8px; font-weight:700; }
+  nav.side a { display:block; color:#aeb4c0; font-size:13.5px; padding:5px 10px; border-radius:7px; line-height:1.35; border-left:2px solid transparent; }
+  nav.side a:hover { background:#1f222b; color:#fff; text-decoration:none; }
+  nav.side a.active { color:#fff; background:#23262f; border-left-color:var(--gold); }
+  nav.side a .n { color:#6b7283; font-family:var(--mono); font-size:11px; margin-right:7px; }
+  .menu-btn { display:none; position:fixed; top:14px; left:14px; z-index:60; background:var(--ink); color:#fff; border:none; width:42px; height:42px; border-radius:10px; align-items:center; justify-content:center; cursor:pointer; box-shadow:var(--shadow); }
+  .menu-btn span, .menu-btn span::before, .menu-btn span::after { content:""; display:block; width:18px; height:2px; background:#fff; position:relative; }
+  .menu-btn span::before { position:absolute; top:-6px; } .menu-btn span::after { position:absolute; top:6px; }
+
+  /* ---------- Hero ---------- */
+  .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); font-weight:600; }
+  h1.title { font-family:var(--serif); font-weight:600; font-size:52px; line-height:1.04; letter-spacing:-.5px; margin:14px 0 18px; color:var(--ink); }
+  .lede { font-size:19px; line-height:1.6; color:var(--ink-soft); max-width:48ch; }
+  .lede b { color:var(--ink); font-weight:650; }
+  .stats { display:flex; flex-wrap:wrap; gap:14px; margin:34px 0 8px; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 18px; box-shadow:var(--shadow); }
+  .stat .v { font-family:var(--mono); font-size:22px; font-weight:600; color:var(--ink); }
+  .stat .k { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; }
+
+  /* ---------- Sections ---------- */
+  section { margin-top:78px; scroll-margin-top:28px; }
+  .sec-head { border-top:2px solid var(--ink); padding-top:14px; margin-bottom:8px; }
+  .sec-head .num { font-family:var(--mono); font-size:13px; color:var(--gold); font-weight:700; letter-spacing:1px; }
+  h2.sec { font-size:32px; line-height:1.12; letter-spacing:-.3px; margin:4px 0 10px; color:var(--ink); font-weight:700; }
+  h3 { font-size:21px; margin:38px 0 6px; color:var(--ink); font-weight:680; letter-spacing:-.2px; }
+  h4 { font-size:13px; text-transform:uppercase; letter-spacing:1.2px; color:var(--muted); margin:22px 0 10px; font-weight:700; }
+  p { margin:12px 0; }
+  .muted { color:var(--muted); }
+  code, .path, .ty { font-family:var(--mono); font-size:.86em; }
+  code { background:var(--surface-2); border:1px solid var(--border); border-radius:5px; padding:1px 6px; color:#7a3b12; white-space:nowrap; }
+  .path { background:#eef4f6; border:1px solid #d6e6ec; color:#0a5e76; border-radius:5px; padding:1px 6px; white-space:nowrap; font-size:.82em; }
+  .ty { color:var(--rust); font-weight:600; }
+
+  /* ---------- Callout cards ---------- */
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  @media (max-width:760px){ .grid2,.grid3{ grid-template-columns:1fr; } }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:20px 22px; box-shadow:var(--shadow); }
+  .card h5 { margin:0 0 6px; font-size:16px; color:var(--ink); font-weight:680; }
+  .card p { margin:6px 0 0; font-size:14.5px; color:var(--ink-soft); }
+
+  .pill { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 9px; border-radius:999px; font-weight:600; letter-spacing:.3px; vertical-align:middle; }
+  .pill.go { background:var(--go-soft); color:#075c73; }
+  .pill.rust { background:var(--rust-soft); color:var(--rust); }
+  .pill.both { background:var(--gold-soft); color:#8a5a08; }
+
+  /* ---------- Diagram ---------- */
+  .diagram { background:var(--ink); border-radius:16px; padding:30px 26px; color:#dfe3ea; margin:22px 0; overflow-x:auto; }
+  .diagram .cap { font-family:var(--mono); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:#7f8696; margin-bottom:20px; }
+  .flow { display:flex; align-items:stretch; gap:0; min-width:680px; }
+  .node { background:#23262f; border:1px solid #343843; border-radius:10px; padding:11px 13px; min-width:120px; flex:1; }
+  .node .lab { font-size:13px; font-weight:650; color:#fff; }
+  .node .det { font-size:11.5px; color:#969db0; margin-top:3px; line-height:1.4; }
+  .node.gold { border-color:#6b551f; } .node.gold .lab{ color:#e9b44a; }
+  .node.go { border-color:#155f74; } .node.go .lab{ color:#46c6e3; }
+  .node.rust { border-color:#7a3a1f; } .node.rust .lab{ color:#ef8a5c; }
+  .arrow { display:flex; align-items:center; padding:0 6px; color:#646b7a; font-size:20px; flex:none; }
+  .stack { display:flex; flex-direction:column; gap:8px; flex:1; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; margin-top:18px; font-size:12px; color:#969db0; }
+  .legend i { width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:6px; vertical-align:middle; }
+
+  /* ---------- Tree ---------- */
+  .tree { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px 24px; box-shadow:var(--shadow); font-family:var(--mono); font-size:13px; line-height:1.85; overflow-x:auto; }
+  .tree .d { color:var(--indigo); font-weight:600; }
+  .tree .c { color:var(--muted); font-family:var(--sans); font-size:12.5px; }
+  .tree .lvl1 { padding-left:0; } .tree .lvl2 { padding-left:24px; } .tree .lvl3 { padding-left:48px; }
+
+  /* ---------- Subsystem block ---------- */
+  .sub { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:26px 28px; box-shadow:var(--shadow); margin:18px 0; }
+  .sub > .one { font-size:15px; color:var(--ink-soft); font-style:italic; border-left:3px solid var(--gold); padding-left:14px; margin:2px 0 16px; }
+  .sub h3 { margin-top:4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .files { list-style:none; padding:0; margin:8px 0; }
+  .files li { padding:5px 0; border-bottom:1px dashed var(--border); display:flex; gap:12px; align-items:baseline; }
+  .files li:last-child { border-bottom:none; }
+  .files .role { font-size:13.5px; color:var(--ink-soft); }
+  table.abs { width:100%; border-collapse:collapse; margin:8px 0; font-size:13.5px; }
+  table.abs th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.8px; color:var(--faint); padding:6px 10px; border-bottom:2px solid var(--border); }
+  table.abs td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  table.abs td:first-child { white-space:nowrap; }
+  .kind { font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+
+  .ds { border:1px solid var(--border); border-left:4px solid var(--gold); background:linear-gradient(90deg,var(--gold-soft),transparent 80%); border-radius:0 10px 10px 0; padding:13px 16px; margin:10px 0; }
+  .ds .name { font-weight:680; color:#8a5a08; font-size:14.5px; }
+  .ds .why { font-size:14px; color:var(--ink-soft); margin-top:3px; }
+
+  .flowtext { background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px 16px; font-size:14px; color:var(--ink-soft); }
+  .flowtext b { color:var(--ink); }
+
+  details { border:1px solid var(--border); border-radius:10px; margin:10px 0; overflow:hidden; background:var(--surface); }
+  details > summary { cursor:pointer; padding:11px 16px; font-weight:650; font-size:14px; color:var(--ink); list-style:none; display:flex; justify-content:space-between; align-items:center; background:var(--surface-2); }
+  details > summary::-webkit-details-marker { display:none; }
+  details > summary::after { content:"+"; font-family:var(--mono); color:var(--muted); font-size:16px; }
+  details[open] > summary::after { content:"–"; }
+  details .body { padding:6px 18px 16px; }
+  .wl { list-style:none; padding:0; margin:6px 0; }
+  .wl li { padding:9px 0; border-bottom:1px solid var(--border); }
+  .wl li:last-child { border-bottom:none; }
+  .wl .task { font-weight:600; color:var(--ink); font-size:14px; }
+  .wl .loc { font-size:13px; color:var(--muted); margin-top:2px; }
+  .gotchas { list-style:none; padding:0; margin:6px 0; }
+  .gotchas li { font-size:13.7px; color:var(--ink-soft); padding:7px 0 7px 24px; position:relative; border-bottom:1px solid var(--border); }
+  .gotchas li:last-child { border-bottom:none; }
+  .gotchas li::before { content:"⚠"; position:absolute; left:0; top:7px; color:var(--gold); font-size:13px; }
+
+  /* ---------- Master index / filter ---------- */
+  .filter { width:100%; padding:13px 16px; font-size:15px; border:1px solid var(--border-strong); border-radius:11px; background:var(--surface); margin:6px 0 18px; font-family:var(--sans); box-shadow:var(--shadow); }
+  .filter:focus { outline:2px solid var(--gold); border-color:var(--gold); }
+  .idx-grp { margin:14px 0; }
+  .idx-grp > .lbl { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--gold); margin-bottom:4px; }
+  .idx-row { padding:10px 14px; border:1px solid var(--border); border-radius:10px; margin:6px 0; background:var(--surface); }
+  .idx-row .task { font-weight:600; font-size:14px; color:var(--ink); }
+  .idx-row .loc { font-size:13px; color:var(--muted); margin-top:3px; }
+  .nores { color:var(--muted); font-style:italic; padding:20px; text-align:center; }
+
+  .toptip { background:var(--green-soft); border:1px solid #c4e3cf; border-radius:12px; padding:16px 20px; margin:16px 0; }
+  .toptip b { color:var(--green); }
+  .cmd { background:var(--ink); color:#e9edf2; border-radius:12px; padding:18px 20px; font-family:var(--mono); font-size:13px; line-height:1.9; overflow-x:auto; margin:14px 0; }
+  .cmd .c { color:#7f8696; } .cmd .k { color:#e9b44a; }
+
+  .totop { position:fixed; right:22px; bottom:22px; background:var(--ink); color:#fff; border:none; width:46px; height:46px; border-radius:50%; cursor:pointer; box-shadow:var(--shadow); font-size:18px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:30; }
+  .totop.show { opacity:1; pointer-events:auto; }
+  footer { margin-top:90px; border-top:2px solid var(--ink); padding-top:22px; color:var(--muted); font-size:13px; }
+  .hr { height:1px; background:var(--border); border:none; margin:30px 0; }
+</style>
+</head>
+<body>
+
+<button class="menu-btn" id="menuBtn" aria-label="Menu"><span></span></button>
+<div class="scrim" id="scrim"></div>
+
+<div class="shell">
+  <!-- ============ SIDEBAR ============ -->
+  <nav class="side" id="side">
+    <div class="brand">
+      <div class="dot">RPC</div>
+      <div>
+        <h2>Stellar RPC</h2>
+        <div class="sub">Field Guide</div>
+      </div>
+    </div>
+    <div class="toc" id="toc">
+      <a href="#top"><span class="n">00</span>Start here</a>
+      <a href="#overview"><span class="n">01</span>The 10,000-ft view</a>
+      <a href="#dataflow"><span class="n">02</span>Architecture &amp; data flow</a>
+      <a href="#map"><span class="n">03</span>Map of the codebase</a>
+
+      <div class="grp">Deep dives · Process &amp; transport</div>
+      <a href="#daemon"><span class="n">04</span>Daemon lifecycle</a>
+      <a href="#config"><span class="n">05</span>Configuration</a>
+      <a href="#transport"><span class="n">06</span>JSON-RPC transport</a>
+
+      <div class="grp">Deep dives · The endpoints</div>
+      <a href="#reads"><span class="n">07</span>Read / query methods</a>
+      <a href="#simsend"><span class="n">08</span>Simulate &amp; submit</a>
+
+      <div class="grp">Deep dives · Data &amp; ingest</div>
+      <a href="#db"><span class="n">09</span>SQLite store</a>
+      <a href="#ingest"><span class="n">10</span>Ingestion &amp; backfill</a>
+      <a href="#windows"><span class="n">11</span>Fee windows &amp; limiters</a>
+      <a href="#datastore"><span class="n">12</span>Datastore · xdr2json · util</a>
+
+      <div class="grp">Deep dives · The Rust core</div>
+      <a href="#preflight"><span class="n">13</span>Preflight (Go FFI side)</a>
+      <a href="#rust"><span class="n">14</span>Rust libs &amp; dual-protocol</a>
+
+      <div class="grp">Reference</div>
+      <a href="#build"><span class="n">15</span>Build, test, CI</a>
+      <a href="#datastructures"><span class="n">16</span>★ Special data structures</a>
+      <a href="#whereindex"><span class="n">17</span>“Where do I look…?”</a>
+      <a href="#start"><span class="n">18</span>Getting started</a>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN ============ -->
+  <main id="top">
+    <span class="eyebrow">Onboarding · reverse-engineered walkthrough</span>
+    <h1 class="title">Stellar&nbsp;RPC,<br/>from the inside.</h1>
+    <p class="lede">A JSON-RPC server that exposes the Stellar network's current view —
+      <b>submit transactions</b>, <b>query their status</b>, <b>read ledger entries</b>, and
+      <b>simulate Soroban smart-contract calls</b>. It runs a Captive Core subprocess, ingests
+      every closed ledger into a local SQLite store, and answers queries from that store plus live Core lookups.</p>
+    <p class="lede" style="margin-top:14px">The one thing to internalize first: this is a <b>Go daemon that links two Rust
+      static libraries over cgo</b>. That hybrid shapes the build, the simulation engine, and the most
+      interesting design in the repo.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="v">~11.3k</div><div class="k">Go LOC</div></div>
+      <div class="stat"><div class="v">~1.1k</div><div class="k">Rust LOC</div></div>
+      <div class="stat"><div class="v">12</div><div class="k">RPC methods</div></div>
+      <div class="stat"><div class="v">2</div><div class="k">protocols at once</div></div>
+      <div class="stat"><div class="v">SQLite</div><div class="k">local store (WAL)</div></div>
+    </div>
+
+    <div class="toptip">
+      <b>How to read this guide.</b> §1–3 give you the mental model and the file map. §4–15 are the deep
+      dives — one per subsystem, each with the same shape: <em>purpose → key files → key abstractions →
+      special data structures → flow → where-to-look → gotchas</em>. §16 collects the clever data structures
+      in one place, §17 is a searchable “where do I look when I need to change X?” index, and §18 gets you building.
+    </div>
+
+    <!-- ====================== 01 OVERVIEW ====================== -->
+    <section id="overview">
+      <div class="sec-head"><span class="num">01</span><h2 class="sec">The 10,000-ft view</h2></div>
+      <p>Strip away the detail and the daemon does just <b>two jobs</b>, plus a sandbox:</p>
+
+      <div class="grid3" style="margin-top:18px">
+        <div class="card">
+          <h5>① Ingest &amp; store</h5>
+          <p>A background service pulls each newly-closed ledger from Captive Core and writes it — ledger header,
+          transactions, events — into local SQLite, one DB transaction per ledger. Old data is trimmed to a
+          retention window. This is the daemon's “memory.”</p>
+        </div>
+        <div class="card">
+          <h5>② Serve queries</h5>
+          <p>A JSON-RPC server answers reads (<code>getEvents</code>, <code>getLedgers</code>,
+          <code>getTransaction(s)</code>, <code>getFeeStats</code>…) from that SQLite store, plus live
+          state lookups (<code>getLedgerEntries</code>) straight from Core.</p>
+        </div>
+        <div class="card">
+          <h5>③ Simulate (the sandbox)</h5>
+          <p><code>simulateTransaction</code> runs a Soroban host function in a Rust sandbox over cgo,
+          fetching only the ledger entries it actually touches. It returns the resource footprint, fees,
+          auth, and predicted state changes a client needs to build a real transaction.</p>
+        </div>
+      </div>
+
+      <p style="margin-top:22px">Everything else is supporting cast: configuration, a Captive Core subprocess as the ledger
+      source, in-memory windows for fee statistics, request throttling middleware, an optional cloud-datastore
+      backend for serving history beyond local retention, and the Rust FFI libraries that power simulation and
+      XDR→JSON conversion.</p>
+
+      <h4>The cast of characters</h4>
+      <ul>
+        <li><b>Captive Core</b> — a <code>stellar-core</code> subprocess the daemon launches and manages; its
+        source of truth for ledgers and live state. Two HTTP clients talk to it: a normal one (submit, info) and a
+        “fast” one on Core's HTTP <em>query</em> port (ledger-entry reads &amp; simulation).</li>
+        <li><b>Ingestion service</b> — the loop that turns closed ledgers into rows in SQLite.</li>
+        <li><b>SQLite store</b> — WAL mode, manual checkpointing, reader/writer split, retention-trimmed.</li>
+        <li><b>JSON-RPC handlers</b> — one per method, each wrapped in throttling + metrics middleware.</li>
+        <li><b>Preflight worker pool + Rust libs</b> — the simulation engine, behind a cgo boundary.</li>
+      </ul>
+    </section>
+
+    <!-- ====================== 02 DATA FLOW ====================== -->
+    <section id="dataflow">
+      <div class="sec-head"><span class="num">02</span><h2 class="sec">Architecture &amp; data flow</h2></div>
+      <p>Two pipelines carry almost all the work. Trace these once and the rest of the codebase falls into place.</p>
+
+      <h3>A · Ledgers in (ingestion &amp; storage)</h3>
+      <div class="diagram">
+        <div class="cap">Write path — one DB transaction per ledger</div>
+        <div class="flow">
+          <div class="node"><div class="lab">Stellar Network</div><div class="det">closed ledgers</div></div>
+          <div class="arrow">→</div>
+          <div class="node gold"><div class="lab">Captive Core</div><div class="det">stellar-core subprocess (ledger backend)</div></div>
+          <div class="arrow">→</div>
+          <div class="node go"><div class="lab">Ingestion Service</div><div class="det">pulls each LedgerCloseMeta</div></div>
+          <div class="arrow">→</div>
+          <div class="stack">
+            <div class="node go"><div class="lab">SQLite WriteTx</div><div class="det">ledger blob + tx index + event index, atomic</div></div>
+            <div class="node go"><div class="lab">Fee Windows</div><div class="det">in-memory ring buffer (live path only)</div></div>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i style="background:#e9b44a"></i>Captive Core / both</span>
+          <span><i style="background:#46c6e3"></i>Go</span>
+          <span><i style="background:#ef8a5c"></i>Rust / FFI</span>
+        </div>
+      </div>
+      <p class="muted" style="font-size:14px">On startup, an optional <b>backfill</b> phase bulk-loads historical ledgers
+      from a cloud datastore (S3/GCS) in ~960-ledger chunks <em>before</em> live ingestion begins — filling backward
+      to the retention edge, then forward to the datastore tip.</p>
+
+      <h3>B · Requests in (query &amp; simulation lifecycle)</h3>
+      <div class="diagram">
+        <div class="cap">Read path — HTTP POST to JSON-RPC response</div>
+        <div class="flow">
+          <div class="node"><div class="lab">HTTP POST “/”</div><div class="det">CORS · 512 KB cap · global limiters</div></div>
+          <div class="arrow">→</div>
+          <div class="node go"><div class="lab">jrpc2 bridge</div><div class="det">routes by method name</div></div>
+          <div class="arrow">→</div>
+          <div class="node go"><div class="lab">per-method chain</div><div class="det">duration limiter → backlog limiter → metrics</div></div>
+          <div class="arrow">→</div>
+          <div class="node go"><div class="lab">handler</div><div class="det">methods/*.go</div></div>
+        </div>
+        <div class="flow" style="margin-top:14px">
+          <div class="node go" style="max-width:160px"><div class="lab">handler reads from…</div></div>
+          <div class="arrow">→</div>
+          <div class="stack">
+            <div class="node go"><div class="lab">SQLite reader</div><div class="det">ledgers / txs / events</div></div>
+            <div class="node gold"><div class="lab">Fast Core client</div><div class="det">getLedgerEntries — live state</div></div>
+            <div class="node rust"><div class="lab">Preflight pool → cgo → Rust soroban host</div><div class="det">simulateTransaction; calls back into Go (SnapshotSourceGet) for entries on demand</div></div>
+          </div>
+        </div>
+        <div class="legend">
+          <span>Response is either <b style="color:#e9b44a">base64 XDR</b> (default) or <b style="color:#ef8a5c">JSON</b> via the xdr2json Rust lib — chosen by the request's <code style="color:#e9b44a;background:#23262f;border-color:#343843">xdrFormat</code> field.</span>
+        </div>
+      </div>
+
+      <h4>The composition root</h4>
+      <p>Everything is wired together in one place: <span class="path">daemon.MustNew()</span> in
+      <span class="path">internal/daemon/daemon.go</span>. It constructs every subsystem in a deliberate order
+      (Core → archive → DB → storage warm-up → ingest → backfill → preflight pool → JSON-RPC handler → HTTP servers →
+      metrics), then <span class="path">Run()</span> serves until a signal. If you ever wonder “what starts when?”,
+      that function is the single source of truth.</p>
+    </section>
+
+    <!-- ====================== 03 MAP ====================== -->
+    <section id="map">
+      <div class="sec-head"><span class="num">03</span><h2 class="sec">Map of the codebase</h2></div>
+      <p>Almost all the daemon lives under <span class="path">cmd/stellar-rpc/</span>. The Go code is in
+      <span class="path">internal/</span>; the Rust libraries are in <span class="path">lib/</span>.</p>
+
+      <div class="tree">
+        <div class="lvl1"><span class="d">cmd/stellar-rpc/</span></div>
+        <div class="lvl2"><span class="d">main.go</span> <span class="c">— cobra CLI: run · version · gen-config-file</span></div>
+        <div class="lvl2"><span class="d">internal/</span></div>
+        <div class="lvl3"><span class="d">daemon/</span> <span class="c">— composition root, lifecycle, Core clients, metrics</span></div>
+        <div class="lvl3"><span class="d">config/</span> <span class="c">— option-driven config (env + flag + TOML), version vars</span></div>
+        <div class="lvl3"><span class="d">jsonrpc.go</span> <span class="c">— registers every method + the middleware chain</span></div>
+        <div class="lvl3"><span class="d">methods/</span> <span class="c">— one file per RPC method (the handlers)</span></div>
+        <div class="lvl3"><span class="d">db/</span> <span class="c">— SQLite store: ledger / transaction / event, migrations</span></div>
+        <div class="lvl3"><span class="d">ingest/</span> <span class="c">— live ingestion service + backfill</span></div>
+        <div class="lvl3"><span class="d">preflight/</span> <span class="c">— Go side of the cgo bridge + worker pool</span></div>
+        <div class="lvl3"><span class="d">feewindow/</span> · <span class="d">ledgerbucketwindow/</span> <span class="c">— in-memory fee stats + ring buffer</span></div>
+        <div class="lvl3"><span class="d">network/</span> <span class="c">— backlog &amp; request-duration limiters</span></div>
+        <div class="lvl3"><span class="d">rpcdatastore/</span> · <span class="d">ledgerentries/</span> <span class="c">— cold-storage ledgers · live entry reads</span></div>
+        <div class="lvl3"><span class="d">xdr2json/</span> · <span class="d">util/</span> <span class="c">— XDR→JSON wrapper · panic-group helper</span></div>
+        <div class="lvl3"><span class="d">integrationtest/</span> <span class="c">— Docker-Compose harness with real Core</span></div>
+        <div class="lvl2"><span class="d">lib/</span> <span class="c">(Rust, linked via cgo)</span></div>
+        <div class="lvl3"><span class="d">preflight/</span> <span class="c">— soroban simulation; the prev/curr dual-protocol trick</span></div>
+        <div class="lvl3"><span class="d">xdr2json/</span> <span class="c">— XDR blob → JSON string</span></div>
+        <div class="lvl3"><span class="d">ffi/</span> <span class="c">— shared CXDR blob type + C-string helpers</span></div>
+        <div class="lvl1" style="margin-top:10px"><span class="d">Makefile</span> <span class="c">— THE build entrypoint (builds Rust libs before Go)</span></div>
+        <div class="lvl1"><span class="d">Cargo.toml</span> <span class="c">— pulls soroban-env in TWICE (-prev / -curr)</span></div>
+      </div>
+
+      <p class="muted" style="font-size:14px;margin-top:14px">Rule of thumb: a <em>method</em> question → <span class="path">methods/</span>;
+      a <em>storage</em> question → <span class="path">db/</span>; a <em>simulation</em> question → <span class="path">preflight/</span> then <span class="path">lib/preflight/</span>;
+      a <em>“how does it start / what's configurable”</em> question → <span class="path">daemon/</span> + <span class="path">config/</span>.</p>
+    </section>
+
+    <!-- ====================== 04 DAEMON ====================== -->
+    <section id="daemon">
+      <div class="sec-head"><span class="num">04</span><h2 class="sec">Daemon lifecycle &amp; wiring</h2></div>
+      <div class="sub">
+        <h3>The composition root <span class="pill go">Go</span></h3>
+        <p class="one">The cobra CLI plus the <span class="ty">Daemon</span> struct that constructs, owns, starts, and gracefully tears down every other subsystem in a fixed order.</p>
+        <p>This is the place where all the independently-built pieces are instantiated and wired to each other.
+        <span class="path">main.go</span> is a thin CLI shell; the real work is <span class="path">daemon.go</span>'s
+        <span class="ty">MustNew</span> (build everything, fail-fast via <code>logger.Fatal</code>) and <span class="ty">Run</span>
+        (serve until a shutdown signal). The <span class="ty">Daemon</span> struct holds a reference to every subsystem
+        and is itself passed — as the narrow <span class="ty">interfaces.Daemon</span> abstraction — into the subsystems
+        that need shared resources. <b>Read this first</b>: understanding boot order explains the whole system.</p>
+
+        <h4>Key files</h4>
+        <ul class="files">
+          <li><span class="path">main.go</span><span class="role">Cobra root: <code>run</code> (default), <code>version</code>, <code>gen-config-file</code>.</span></li>
+          <li><span class="path">daemon/daemon.go</span><span class="role">The <span class="ty">Daemon</span> struct, <span class="ty">MustNew</span> startup order, all <code>create*/must*</code> helpers, HTTP+admin servers, graceful <span class="ty">Close()</span>, storage warm-up.</span></li>
+          <li><span class="path">daemon/metrics.go</span><span class="role">Implements the <span class="ty">interfaces.Daemon</span> methods; build-info gauge + the <span class="ty">CoreClientWithMetrics</span> submission wrapper.</span></li>
+          <li><span class="path">daemon/interfaces/interfaces.go</span><span class="role">The decoupling seam: <span class="ty">Daemon</span>, <span class="ty">CoreClient</span>, <span class="ty">FastCoreClient</span> interfaces.</span></li>
+          <li><span class="path">util/panicgroup.go</span><span class="role">Server goroutines that <code>os.Exit(1)</code> on panic after logging a stack.</span></li>
+        </ul>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">MustNew</span> <span class="kind">func · :175</span></td><td>The startup orchestrator — single source of truth for what gets created and in what order. Fails fast, never returns an error.</td></tr>
+          <tr><td><span class="ty">Run</span> / <span class="ty">Close</span> <span class="kind">func</span></td><td>Serving loop (panic-group goroutines + signal select) and the idempotent (<code>sync.Once</code>) graceful-shutdown teardown.</td></tr>
+          <tr><td><span class="ty">interfaces.Daemon</span> <span class="kind">interface</span></td><td>Tiny surface (metrics + the two Core clients + core handle) that lets <span class="path">ingest</span>/<span class="path">preflight</span>/<span class="path">methods</span> be tested against <span class="ty">NoOpDaemon</span>.</td></tr>
+          <tr><td><span class="ty">CoreClient</span> / <span class="ty">FastCoreClient</span></td><td>Two Core access paths: normal (info + submit) vs the high-perf query-port client used by <code>getLedgerEntries</code> and <code>simulateTransaction</code>.</td></tr>
+          <tr><td><span class="ty">mustInitializeStorage</span> <span class="kind">func · :423</span></td><td>Replays the retention range from SQLite at startup to apply pending data migrations <em>and</em> warm the fee windows.</td></tr>
+        </table>
+
+        <h4>Special data structures</h4>
+        <div class="ds"><span class="name">Two separate Core HTTP clients</span><div class="why">Submit/info go through the normal client; latency-sensitive ledger-entry reads go through a second client on Core's HTTP <em>query</em> port (served from an in-memory snapshot). Surfaced as two interfaces so callers can't confuse them.</div></div>
+        <div class="ds"><span class="name">Fee-window fill modeled as a DB migration</span><div class="why">One <code>StreamLedgerRange</code> replay feeds both pending data migrations and the in-memory fee windows — <span class="ty">FeeWindows.AsMigration</span> rides the same machinery instead of a second pass.</div></div>
+
+        <div class="flowtext"><b>Boot flow.</b> <code>main()</code> → <code>cfg.SetValues()</code> → <code>cfg.Validate()</code> → <b>MustNew</b> {logger → captive core → history archive → DB → storage warm-up → shared ReadWriter → optional datastore → ingest service → <em>backfill (if enabled, then reset cache + fee windows)</em> → start live ingestion → preflight pool → JSON-RPC handler → HTTP + admin servers → metrics} → <b>Run</b> {serve in panic-group goroutines; block on SIGINT/SIGTERM → Close}.</div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to add a subsystem or change start order?</div><div class="loc"><span class="ty">MustNew</span> (daemon.go:175) + a field on the <span class="ty">Daemon</span> struct (daemon.go:52).</div></li>
+          <li><div class="task">…I need to change shutdown order?</div><div class="loc"><span class="ty">Daemon.close</span> (daemon.go:88).</div></li>
+          <li><div class="task">…a feature should hit a different Core endpoint?</div><div class="loc"><code>createStellarCoreClient</code> / <code>createHighperfStellarCoreClient</code> (daemon.go:304–316).</div></li>
+          <li><div class="task">…I need a process-level metric or pprof endpoint?</div><div class="loc"><code>registerMetrics</code> (metrics.go) · <code>createAdminMux</code> (daemon.go:408, only if <code>ADMIN_ENDPOINT</code> set).</div></li>
+        </ul></div></details>
+
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li><span class="ty">MustNew</span> never returns an error — every failure is <code>logger.Fatal</code> (os.Exit). No partial-startup recovery.</li>
+          <li>Startup order is load-bearing: backfill must finish <em>before</em> live ingestion, and afterwards <code>db.ResetCache()</code> + <code>feewindows.Reset()</code> are called so caches repopulate from the backfilled DB.</li>
+          <li>The Prometheus namespace is still <code>"soroban_rpc"</code> (a rename to <code>stellar_rpc</code> is pending) — relevant when querying metrics.</li>
+          <li>Version/commit/branch/soroban-env strings come from <code>-ldflags</code> at build time; a bare <code>go build</code> reports <code>dev</code>.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 05 CONFIG ====================== -->
+    <section id="config">
+      <div class="sec-head"><span class="num">05</span><h2 class="sec">Configuration</h2></div>
+      <div class="sub">
+        <h3>One declaration, three namespaces <span class="pill go">Go</span></h3>
+        <p class="one">Every setting is a single <span class="ty">Option</span> that simultaneously defines its env var, CLI flag, TOML key, default, parser, and validator.</p>
+        <p>The whole point is to prevent drift: a setting is described <em>once</em> as a struct literal in
+        <span class="path">options.go</span>, and that one description drives flag registration, env lookup, TOML
+        parse/marshal, and validation. The env var and TOML key auto-derive from the flag name
+        (<code>database-url</code> → <code>DATABASE_URL</code>), so the three can never silently disagree. It also
+        backs the <code>gen-config-file</code> command, which emits a fully-commented default TOML.</p>
+
+        <h4>Key files</h4>
+        <ul class="files">
+          <li><span class="path">config/options.go</span><span class="role"><b>The authoritative list</b> — <code>cfg.options()</code> returns every <span class="ty">Option</span> literal (~60 settings). This is where you add/change a setting.</span></li>
+          <li><span class="path">config/option.go</span><span class="role">The <span class="ty">Option</span> struct + per-option set/marshal/validate helpers.</span></li>
+          <li><span class="path">config/main.go</span><span class="role">The <span class="ty">Config</span> struct (one field per setting) + <span class="ty">SetValues</span> load orchestration + <span class="ty">Validate</span>.</span></li>
+          <li><span class="path">config/parse.go</span> · <span class="path">flags.go</span> · <span class="path">toml.go</span><span class="role">Type-specific parsers · pflag binding · TOML read/write.</span></li>
+          <li><span class="path">config/version.go</span><span class="role">Build-info vars overwritten via <code>-ldflags</code>.</span></li>
+        </ul>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">Option</span> <span class="kind">struct</span></td><td>Name + EnvVar + TomlKey + Usage + DefaultValue + <span class="ty">ConfigKey</span> (a typed pointer into the <span class="ty">Config</span> field it writes) + optional <code>CustomSetValue</code>/<code>Validate</code>/<code>MarshalTOML</code> hooks.</td></tr>
+          <tr><td><span class="ty">Config.SetValues</span> <span class="kind">func</span></td><td>Establishes precedence: defaults → TOML file → env → flags (env+flags are applied <em>twice</em> so they override file values).</td></tr>
+          <tr><td><span class="ty">CustomSetValue</span> hooks</td><td>Escape hatch for non-trivial settings (log-level, <code>--network</code> shortcut, datastore config).</td></tr>
+        </table>
+
+        <div class="ds"><span class="name">ConfigKey as a typed pointer into Config</span><div class="why">Both the pflag type and the parser are chosen by type-switching on that pointer — a setting's Go type alone determines its parsing/flag behavior. Guard-rail tests enforce every field has exactly one Option pointing at it.</div></div>
+        <div class="ds"><span class="name">Layered re-application precedence</span><div class="why">Env+flags are applied once (to discover the config-file path), the file is loaded, then env+flags are applied <em>again</em> so explicit env/CLI always win over the file.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to add a config setting?</div><div class="loc">Add a field to <span class="ty">Config</span> (main.go), then append an <span class="ty">Option</span> literal in <code>cfg.options()</code> (options.go). Guard-rail tests fail until it's wired correctly.</div></li>
+          <li><div class="task">…I need cross-field validation or a custom type?</div><div class="loc">Set the <code>Validate</code> / <code>CustomSetValue</code> hooks (model on log-format, network); add a parser branch in parse.go if needed.</div></li>
+          <li><div class="task">…the version string is wrong?</div><div class="loc">version.go vars + the <code>GOLDFLAGS</code>/<code>RS_ENV_VERSION</code> block in the Makefile.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>Precedence is defaults &lt; TOML &lt; env &lt; flags — and env+flags are applied a <em>second</em> time after the file; easy to miss.</li>
+          <li>Some “defaults” are set inside a <code>Validate</code> hook because they depend on other parsed values (e.g. <code>stellar-core-url</code> derives from the captive-core port).</li>
+          <li><code>gen-config-file</code> calls <code>SetValues</code> but intentionally <em>not</em> <code>Validate</code>, so it can emit a partial template.</li>
+          <li>soroban-env-prev/curr versions come from the Makefile parsing <code>cargo metadata</code> with jq, not from Go.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 06 TRANSPORT ====================== -->
+    <section id="transport">
+      <div class="sec-head"><span class="num">06</span><h2 class="sec">JSON-RPC transport &amp; handler registration</h2></div>
+      <div class="sub">
+        <h3>The front door <span class="pill go">Go</span></h3>
+        <p class="one">Takes an HTTP POST, runs it through CORS + a 512 KB cap + per-method limiters + metrics, bridges it to a creachadair/jrpc2 dispatcher, and routes the method name to its handler.</p>
+        <p><span class="ty">NewJSONRPCHandler</span> in <span class="path">internal/jsonrpc.go</span> is the single assembly point.
+        It declares <b>every supported method</b>, builds each handler with its dependencies, wraps each in a middleware
+        chain, then mounts them on a <span class="ty">jhttp.Bridge</span> that speaks HTTP on one side and jrpc2 on the
+        other. Cross-cutting concerns (back-pressure, timeouts, metrics, CORS, size cap, logging) live here so the
+        individual method handlers stay focused on business logic.</p>
+
+        <h4>The 12 registered methods</h4>
+        <p style="margin-top:4px"><code>getHealth</code> · <code>getEvents</code> · <code>getNetwork</code> ·
+          <code>getVersionInfo</code> · <code>getLatestLedger</code> · <code>getLedgers</code> ·
+          <code>getLedgerEntries</code> · <code>getTransaction</code> · <code>getTransactions</code> ·
+          <code>sendTransaction</code> · <code>simulateTransaction</code> · <code>getFeeStats</code></p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">NewJSONRPCHandler</span> <span class="kind">func</span></td><td>Builds a slice of per-method config (handler, queue limit, duration limit), wraps each into a dispatch <span class="ty">handler.Map</span>, and feeds it to the bridge behind global limiters + cap + CORS.</td></tr>
+          <tr><td><span class="ty">methods.NewHandler</span> <span class="kind">func</span></td><td>The generic pattern every method uses: turns a typed <code>func(ctx, Req)(Resp,err)</code> into a jrpc2 handler and calls <code>AllowArray(false)</code> to force named params.</td></tr>
+          <tr><td><span class="ty">jhttp.Bridge</span></td><td>The jrpc2 ⇄ HTTP adapter — parses the envelope, dispatches by method name, serializes the reply.</td></tr>
+          <tr><td><span class="ty">decorateHandlers</span> <span class="kind">func</span></td><td>Wraps every handler with the Prometheus timing decorator (<code>request_duration_seconds</code>, labeled endpoint + status).</td></tr>
+        </table>
+
+        <div class="ds"><span class="name">Name-based dispatch map (<span class="ty">handler.Map</span>)</span><div class="why">JSON-RPC routes by the request's <code>method</code> string, not by URL path — every request hits <code>"/"</code>. A <code>map[string]jrpc2.Handler</code> keyed by the method-name constant is the natural structure jrpc2 consumes directly.</div></div>
+        <div class="ds"><span class="name"><code>AllowArray(false)</code> named-params only</span><div class="why">Forcing object params (not positional arrays) means request structs can gain new optional fields (like <code>xdrFormat</code>) without breaking existing clients. A deliberate backward-compatibility choice baked into the generic handler.</div></div>
+        <div class="ds"><span class="name"><code>bufferedResponseWriter</code></span><div class="why">The HTTP duration limiter must be able to abandon a slow request and return 504 instead of a half-written body, so it buffers the downstream handler's output and only flushes if it finished in time.</div></div>
+
+        <div class="flowtext"><b>Request flow.</b> POST → CORS → <code>MaxBytesHandler</code> (512 KB) → global HTTP duration + backlog limiters → <b>jhttp.Bridge</b> (looks up method) → timing decorator → per-method <em>duration limiter → backlog limiter</em> → the business handler → handler reads DB/Core and emits base64 XDR or (if <code>xdrFormat:"json"</code>) JSON via xdr2json → decorator records duration+status → bridge serializes reply.</div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to add a new RPC method?</div><div class="loc">Append an entry to the handlers slice in <span class="ty">NewJSONRPCHandler</span> (jsonrpc.go); add <span class="path">methods/&lt;name&gt;.go</span> returning <code>NewHandler(fn)</code>; add the method-name constant + request/response types in the go-stellar-sdk <code>protocols/rpc</code> package; add config limits.</div></li>
+          <li><div class="task">…I need to change concurrency / timeout limits?</div><div class="loc">The <code>cfg.RequestBacklog*QueueLimit</code> / <code>cfg.Max*ExecutionDuration</code> values in the handlers slice; enforcement in <span class="path">network/</span>.</div></li>
+          <li><div class="task">…I need to change CORS / size cap / mount point?</div><div class="loc">Bottom of <span class="ty">NewJSONRPCHandler</span>; the <code>"/"</code> mount in <code>createHTTPHandler</code> (daemon.go).</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>There are <b>two</b> limiter layers: per-method (inside the bridge) and global (wrapping the whole bridge).</li>
+          <li>An empty <code>xdrFormat</code> is valid and means base64. Only <code>"json"</code> and <code>"base64"</code> are accepted.</li>
+          <li><code>getTransactions</code> is the exception that uses <code>handler.New</code> directly, so it does <em>not</em> disable array args.</li>
+          <li>A malformed handler signature panics at startup (in <code>handler.Check</code>), not at request time.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 07 READS ====================== -->
+    <section id="reads">
+      <div class="sec-head"><span class="num">07</span><h2 class="sec">Read / query methods</h2></div>
+      <div class="sub">
+        <h3>Where the query logic lives <span class="pill go">Go</span></h3>
+        <p class="one">The read-side handlers that answer getEvents, getLedgers, getTransaction(s), getLedgerEntries, and getFeeStats — each translating cursor-based pagination and XDR-vs-JSON output.</p>
+        <p>Each <span class="path">methods/get_*.go</span> is a thin handler: validate the request, compute a query
+        range from a pagination cursor, call a <span class="path">db</span> reader (or the fast Core client), and
+        re-encode the resulting XDR into base64 or JSON. The heavy lifting (SQL, XDR decode) lives in
+        <span class="path">internal/db</span>. A recurring theme: responses always echo the store's current ledger
+        window so clients can reason about retention and freshness.</p>
+
+        <h4>The methods at a glance</h4>
+        <table class="abs">
+          <tr><th>Method</th><th>Reads from</th><th>Cursor model</th></tr>
+          <tr><td><code>getEvents</code></td><td>SQLite <code>events</code> table</td><td>4-part <span class="ty">Cursor</span> {ledger, tx, op, event} — also the row primary key</td></tr>
+          <tr><td><code>getTransactions</code></td><td>SQLite (replays ledger meta)</td><td>single int64 <span class="ty">TOID</span> string</td></tr>
+          <tr><td><code>getLedgers</code></td><td>SQLite, then datastore fallback</td><td>plain decimal ledger sequence</td></tr>
+          <tr><td><code>getTransaction</code></td><td>SQLite (hash join)</td><td>—</td></tr>
+          <tr><td><code>getLedgerEntries</code></td><td><b>live Core</b> (fast client), not SQLite</td><td>—</td></tr>
+          <tr><td><code>getFeeStats</code></td><td><b>in-memory</b> fee windows</td><td>—</td></tr>
+        </table>
+
+        <h4>Special data structures</h4>
+        <div class="ds"><span class="name">Event cursor stored AS the SQLite primary key</span><div class="why">The <code>id</code> is a zero-padded <code>&lt;TOID&gt;-&lt;eventIndex&gt;</code> string, so lexicographic comparison equals chronological order. Range queries become <code>WHERE id ≥ start AND id &lt; end ORDER BY id</code> and retention trims become <code>DELETE WHERE id &lt; cutoff</code> — no numeric composite-key gymnastics.</div></div>
+        <div class="ds"><span class="name">Four discrete topic columns (topic1…topic4)</span><div class="why">Soroban events have up to 4 topics. Instead of a join table, each is its own indexed column of marshaled ScVal bytes, so topic filters compile straight to <code>topicN = ?</code> equality predicates, assembled as OR-of-AND clauses.</div></div>
+        <div class="ds"><span class="name">getLedgers local-then-datastore range split</span><div class="why"><code>fetchLedgers</code> splits the requested range at the local first-ledger boundary into all-local / all-remote / split, so a single call can transparently span SQLite + cloud object store.</div></div>
+
+        <div class="flowtext"><b>getEvents flow.</b> validate → derive a start <span class="ty">Cursor</span> (from <code>startLedger</code> or the pagination cursor, with <code>Event++</code>) and an exclusive <code>endLedger</code> (start + a 10,000-ledger scan cap, clamped to retention) → assemble contract/type/topic filters → DB scan calls a <span class="ty">ScanFunction</span> per row until <code>limit</code> → format <span class="ty">EventInfo</span> (XDR or JSON) → next cursor.</div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to change pagination / next-cursor logic?</div><div class="loc"><code>get_events.go</code> (start/end derivation + cursor emission); <code>get_transactions.go</code> <code>initializePagination</code>; cursor encoding in go-stellar-sdk <code>protocols/rpc/cursor.go</code>.</div></li>
+          <li><div class="task">…I need to add/modify an event filter (contract, type, topic)?</div><div class="loc"><code>combineContractIDs/EventTypes/Topics</code> in get_events.go + the SQL assembly in <code>db/event.go</code> <code>GetEvents</code>.</div></li>
+          <li><div class="task">…I need to change where ledger entries are read from?</div><div class="loc"><span class="path">ledgerentries/main.go</span> (<code>coreLedgerEntryGetter</code>); the fast client interface in daemon/interfaces.</div></li>
+          <li><div class="task">…I need to tweak XDR↔JSON formatting?</div><div class="loc"><span class="path">methods/json.go</span> + each handler's <code>switch format</code> block.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li><code>getLedgerEntries</code> does <b>not</b> read SQLite — it queries live state from the fast Captive-Core client at the latest ledger. TTL keys are explicitly rejected. NotFound keys are silently dropped, so the response can be shorter than the request.</li>
+          <li>When paginating, the start position is the item <em>after</em> the cursor (<code>Event++</code> / <code>TransactionOrder++</code>). Forgetting this re-returns the cursor item.</li>
+          <li><code>getEvents</code> caps each scan at 10,000 ledgers regardless of limit; if fewer than <code>limit</code> events are found, the returned cursor is a window marker (MaxCursor at <code>endLedger-1</code>), not a real event id.</li>
+          <li><code>getFeeStats</code> reads precomputed percentiles from memory — no SQLite scan per request.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 08 SIM/SEND ====================== -->
+    <section id="simsend">
+      <div class="sec-head"><span class="num">08</span><h2 class="sec">Simulate &amp; submit</h2></div>
+      <div class="sub">
+        <h3>The only write/execute endpoints <span class="pill both">Go ⇄ Rust</span></h3>
+        <p class="one">simulateTransaction preflights a Soroban op against current ledger state via the Rust worker pool; sendTransaction forwards a signed tx to Captive Core and maps its status back.</p>
+        <p><code>simulateTransaction</code> takes an unsigned/partial envelope, gathers the ledger context the
+        simulation needs (latest seq, bucket-list size, protocol version), dispatches the single operation to the
+        Rust preflight engine through a bounded worker pool, then assembles the output — resource footprint,
+        minimum fee, return value, required auth, diagnostic events, predicted state changes, and an optional
+        <b>restore preamble</b> — into a response. <code>sendTransaction</code> is much thinner: decode, hash,
+        forward the raw base64 to Core, translate Core's submission status.</p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">PreflightGetter</span> <span class="kind">interface</span></td><td>Single-method seam (<code>GetPreflight</code>) the handler depends on; satisfied by the worker pool. Keeps the handler testable and decoupled from cgo.</td></tr>
+          <tr><td><span class="ty">preflight.Preflight</span> <span class="kind">struct</span></td><td>The decoded simulation output: error, events, transaction data (footprint+fees), min fee, return value, auth, CPU/memory, <em>pre-restore</em> data, and ledger-entry diffs.</td></tr>
+          <tr><td><span class="ty">formatResponse</span> <span class="kind">func</span></td><td>The single place every simulation field is serialized into the wire response (XDR vs JSON).</td></tr>
+          <tr><td><span class="ty">validateAuthMode</span> <span class="kind">func</span></td><td>Infers the auth mode when omitted: invoke-with-auth → <code>enforce</code>, without → <code>record</code>.</td></tr>
+        </table>
+
+        <div class="ds"><span class="name">The restore preamble (PreRestore* fields)</span><div class="why">State-archival: an entry the tx touches may be archived. Simulation detects this and returns a <em>separate</em> SorobanTransactionData describing a <code>RestoreFootprint</code> operation the client must submit first. The dual-data shape exists because restore is a distinct prerequisite transaction.</div></div>
+        <div class="ds"><span class="name">LedgerEntryDiff → StateChanges via Before/After presence</span><div class="why">Each diff carries optional Before and After entry bytes; the presence pattern (before-only=Deleted, after-only=Created, both=Updated) compactly encodes the change type without an extra enum crossing the FFI boundary.</div></div>
+        <div class="ds"><span class="name">Bounded job-queue worker pool, fail-fast</span><div class="why">Preflight runs untrusted Soroban code on a dedicated 100 MiB-stack thread and is CPU/memory heavy. A fixed-size channel + fixed worker count caps concurrency; a full queue returns <code>ErrPreflightQueueFull</code> immediately rather than queueing unboundedly.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to change which ops/validation simulate accepts?</div><div class="loc"><span class="ty">NewSimulateTransactionHandler</span> in simulate_transaction.go.</div></li>
+          <li><div class="task">…I need to add/modify a simulate response field?</div><div class="loc"><code>formatResponse</code> / <code>getSimulationResults</code> / <code>getRestorePreamble</code> in simulate_transaction.go; the Rust side mirrors it (see §14).</div></li>
+          <li><div class="task">…I need to change submission status mapping?</div><div class="loc">The status switch in send_transaction.go (ERROR/PENDING/DUPLICATE/TRY_AGAIN_LATER).</div></li>
+          <li><div class="task">…I need to tune simulation concurrency?</div><div class="loc"><code>createPreflightWorkerPool</code> (daemon.go) + config <code>PreflightWorkerCount</code> / <code>PreflightWorkerQueueSize</code>.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li><code>simulateTransaction</code> almost never returns a JSON-RPC error — nearly every failure becomes a normal 200 response with the <code>Error</code> string populated. <code>sendTransaction</code> is the opposite (typed jrpc2 errors).</li>
+          <li>Exactly one operation and zero memo are hard requirements for simulation.</li>
+          <li>For <code>ExtendFootprintTtl</code>/<code>RestoreFootprint</code> the caller must supply <code>SorobanTransactionData</code> (footprint can't be inferred); <code>InvokeHostFunction</code> lets simulation compute it.</li>
+          <li>Resource/fee bumping is <em>not</em> done here — the min fee + footprint are computed in Rust and merely relayed; clients apply them before signing.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 09 DB ====================== -->
+    <section id="db">
+      <div class="sec-head"><span class="num">09</span><h2 class="sec">SQLite store</h2></div>
+      <div class="sub">
+        <h3>Store the blob, index the rest <span class="pill go">Go</span></h3>
+        <p class="one">A WAL-mode SQLite store with a Reader/Writer split that persists raw ledger XDR blobs plus thin index tables, trimmed to a retention window on every commit.</p>
+        <p>The core storage philosophy: <b>store the raw LedgerCloseMeta (LCM) XDR blob once, index everything else.</b>
+        Rather than denormalizing transactions and events into fully-populated tables, the daemon keeps only
+        lightweight index tables (hash → ledger+position for transactions; id/topics/contract → blob for events) and
+        re-derives full objects on the fly from the stored LCM blob at read time. This keeps the database small
+        enough to fit a sliding retention window.</p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">ReadWriter</span> / <span class="ty">WriteTx</span></td><td><code>NewTx()</code> opens one SQLite transaction and yields a <span class="ty">WriteTx</span> exposing <code>LedgerWriter</code>/<code>TransactionWriter</code>/<code>EventWriter</code> — all share the same tx so one ledger's rows commit atomically together.</td></tr>
+          <tr><td><span class="ty">LedgerReader</span> / <span class="ty">TransactionReader</span> / <span class="ty">EventReader</span></td><td>The read side. <code>GetTransaction</code> joins the hash table to the LCM and <em>seeks</em> into the blob; <code>GetEvents</code> scans a cursor range.</td></tr>
+          <tr><td><span class="ty">dbCache</span> <span class="kind">struct</span></td><td>RWMutex-guarded in-memory cache of latest ledger seq + close-time, so <code>getLatestLedger</code> avoids a <code>MAX(seq)</code> query on the hot path.</td></tr>
+          <tr><td><span class="ty">ParseTransaction</span> <span class="kind">func</span></td><td>The on-the-fly hydration — turns an LCM + tx into a full <span class="ty">Transaction</span> with all XDR fields and event lists. “Store the blob, derive the rest,” realized.</td></tr>
+          <tr><td>Migration framework</td><td><span class="ty">MultiMigration</span>/<span class="ty">guardedMigration</span> — <b>data</b> migrations (ledger-range replays, guarded by the metadata table) distinct from SQL schema migrations.</td></tr>
+        </table>
+
+        <h4>Special data structures</h4>
+        <div class="ds"><span class="name">Raw LCM blob as the single source of truth</span><div class="why">A ledger's full content is XDR and large; it's stored once as a BLOB keyed by sequence. Transactions/events tables hold only pointers, and full objects are re-derived from the blob at read time. Minimizes storage; costs re-parsing on reads.</div></div>
+        <div class="ds"><span class="name">Transaction table keyed by 32-byte hash + application_order</span><div class="why">getTransaction maps an opaque hash to a position, then joins to the LCM and <code>Seek(application_order-1)</code> instead of decoding the whole ledger. <b>Fee-bumps get TWO rows</b> (outer + inner hash) so either resolves to the same tx.</div></div>
+        <div class="ds"><span class="name">TOID sentinel positions for non-operation events</span><div class="why">Pre-tx, per-op, post-tx and post-all-txs event stages share one cursor scheme by using reserved sentinel slots (before-all = tx 0; post-tx = max op mask; after-all = max tx mask), preserving both chronological sort order and trimmability.</div></div>
+        <div class="ds"><span class="name">Batched multi-row INSERTs</span><div class="why">SQLite caps bind variables at ~32,766. Transactions (3 vars/row) batch at 3,000 rows; events (10 vars/row) at 1,000 — so a large ledger never exceeds the limit.</div></div>
+
+        <div class="flowtext"><b>Write (per ledger).</b> <code>NewTx</code> → InsertLedger (the blob) + InsertTransactions (hash-index rows, 2 for fee-bumps) + InsertEvents (TOID cursor ids + topics) → <code>Commit</code>: trim everything older than the retention window → COMMIT + atomically bump <span class="ty">dbCache</span> → <code>PRAGMA wal_checkpoint(TRUNCATE)</code>.</div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to add a table/column/index?</div><div class="loc">Add a numbered file in <span class="path">db/sqlmigrations/</span> — auto-embedded via <code>//go:embed</code> and applied at startup.</div></li>
+          <li><div class="task">…I need to change retention/trimming?</div><div class="loc"><code>trimLedgers</code>/<code>trimTransactions</code>/<code>trimEvents</code>, all called from <code>writeTx.Commit</code>.</div></li>
+          <li><div class="task">…I need a one-time backfill of an index table?</div><div class="loc">Register a migration in <code>BuildMigrations</code> (migration.go); the metadata guard makes it idempotent.</div></li>
+          <li><div class="task">…I need WAL/checkpoint behavior?</div><div class="loc"><code>openSQLiteDB</code> DSN pragmas + the <code>postCommit</code> checkpoint closure in db.go.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>The <code>ledger_entries</code> table was <b>dropped</b> in migration 05 — live entry state is no longer stored locally; <code>getLedgerEntries</code> goes to Core.</li>
+          <li>Reads re-decode the raw LCM blob every time; the transactions/events tables are pure indexes.</li>
+          <li>WAL auto-checkpointing is disabled — checkpointing is manual after every write commit.</li>
+          <li>Two distinct migration mechanisms share this package: SQL schema migrations vs ledger-range <em>data</em> migrations. Don't confuse them.</li>
+          <li>Event id ordering correctness depends on the cursor being a fixed-width zero-padded string — change the format and range scans/trims break.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 10 INGEST ====================== -->
+    <section id="ingest">
+      <div class="sec-head"><span class="num">10</span><h2 class="sec">Ingestion &amp; backfill</h2></div>
+      <div class="sub">
+        <h3>Network → local store <span class="pill go">Go</span></h3>
+        <p class="one">A long-lived loop that writes each closed ledger into SQLite (one DB tx per ledger), with an optional one-shot backfill that bulk-loads history from a cloud datastore first.</p>
+        <p>The live ingestion goroutine pulls each new LedgerCloseMeta from the ledger backend (Captive Core),
+        and for every ledger writes header + transactions + events into SQLite inside a single atomic transaction,
+        and feeds the transactions into the in-memory fee windows. On startup it resolves where to resume (DB
+        latest+1, or the history-archive tip if empty). The optional <b>backfill</b> phase runs once before live
+        ingestion, bulk-loading historical ledgers in ~960-ledger chunks so the daemon can answer historical
+        queries without waiting for slow live catch-up.</p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">Service</span> <span class="kind">struct</span></td><td>The engine. <code>Start()</code> launches the run loop; <code>Close()</code> cancels and waits.</td></tr>
+          <tr><td><span class="ty">Service.ingest</span> <span class="kind">func</span></td><td>Per-ledger live path: GetLedger → one WriteTx → write ledger+txs+events → <code>FeeWindows.IngestFees</code> → Commit.</td></tr>
+          <tr><td><span class="ty">Service.ingestRange</span> <span class="kind">func</span></td><td>Backfill bulk path: ONE WriteTx for a whole chunk; does <em>not</em> touch fee windows.</td></tr>
+          <tr><td><span class="ty">BackfillMeta</span> / <span class="ty">RunBackfill</span></td><td>Verify gapless → set bounds → backfill backward to retention edge → frontfill forward to datastore tip → re-verify.</td></tr>
+        </table>
+
+        <div class="ds"><span class="name">One DB tx per ledger (live) vs one per chunk (backfill)</span><div class="why">Live commits each ledger atomically (readers see whole ledgers) and checkpoints each time. Backfill batches a ~960-ledger chunk into one commit to amortize commit + checkpoint cost — throughput over latency, since nothing queries mid-backfill.</div></div>
+        <div class="ds"><span class="name">Fresh backend per backward chunk; persistent for forward</span><div class="why">The cloud-datastore backend is monotonic (forward-only). Backward filling needs a brand-new backend per older chunk; forward filling streams through a single backend over one prepared range. This is the entire reason the two paths differ.</div></div>
+        <div class="ds"><span class="name">ChunkSize ≈ 960 ledgers (OneDay/18)</span><div class="why">A RAM/throughput trade-off (~2 GB per chunk) bounding how many LCM blobs are held in one transaction during bulk load.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to change what's written per ledger?</div><div class="loc"><code>Service.ingestLedgerCloseMeta</code> (covers both live + backfill paths).</div></li>
+          <li><div class="task">…I need to change startup resume/catch-up?</div><div class="loc"><code>Service.getNextLedgerSequence</code> / <code>Service.run</code>.</div></li>
+          <li><div class="task">…I need to change backfill ranges / chunk size?</div><div class="loc"><code>BackfillMeta.setBounds</code> · <code>ChunkSize</code> const · <code>makeBackend</code> buffer sizing.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>The live path updates fee windows; the backfill path does <em>not</em> — backfill relies on <code>feewindows.Reset()</code> afterward to repopulate from the DB. If you add per-ledger work, decide deliberately which path(s) need it.</li>
+          <li><code>RunBackfill</code> refuses to run if the local DB has gaps, and errors if the datastore tip is older than the DB minimum.</li>
+          <li>Frontfill runs twice when backfill was skipped, to catch the tip that advanced during the first pass.</li>
+          <li>After backfill, both <code>db.ResetCache()</code> and <code>feewindows.Reset()</code> run so caches re-derive from the freshly backfilled DB.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 11 WINDOWS ====================== -->
+    <section id="windows">
+      <div class="sec-head"><span class="num">11</span><h2 class="sec">Fee windows &amp; request limiters</h2></div>
+      <div class="sub">
+        <h3>A ring buffer for fees + two limiters per handler <span class="pill go">Go</span></h3>
+        <p class="one">A generic circular buffer of recent ledgers powers classic/Soroban fee-stat percentiles; two composable per-handler limiters enforce throttling and observability on every RPC call.</p>
+        <p>The fee-stats half keeps a sliding window of the most recent N ledgers' fees entirely in memory (no DB query
+        on the hot path) and recomputes a distribution (min/max/mode + percentiles) on every new ledger. It maintains
+        <b>two independent windows</b> — classic per-operation fees and Soroban inclusion fees — because the two classes
+        price completely differently. The middleware half wraps each handler so a slow or flooded method can't exhaust
+        the daemon.</p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">LedgerBucketWindow[T]</span> <span class="kind">generic struct</span></td><td>The reusable sliding-window primitive: a slice preallocated to <code>retentionWindow</code> + a <code>start</code> head index; <code>Append</code> evicts the oldest when full and asserts contiguity.</td></tr>
+          <tr><td><span class="ty">FeeWindows</span> / <span class="ty">FeeWindow</span></td><td>Two windows over <code>[]uint64</code> fee lists; <code>IngestFees</code> classifies each tx and appends; <code>GetFeeDistribution</code> returns the cached stats under an RLock.</td></tr>
+          <tr><td><span class="ty">backlogQLimiter</span></td><td>Atomic pending-counter concurrency cap; rejects with 503 / jrpc error over the limit.</td></tr>
+          <tr><td><span class="ty">requestDurationLimiter</span></td><td>Runs the handler in a goroutine with warn + limit timers; aborts with 504 / jrpc <code>-32001</code> on the limit.</td></tr>
+        </table>
+
+        <div class="ds"><span class="name">Circular buffer for the ledger window</span><div class="why">Ledgers arrive strictly in order and the window only cares about the most recent N. A ring buffer gives O(1) append-with-eviction and fixed memory — no reallocation or shifting as the window slides. <code>Append</code> also asserts contiguity since the source is a monotonic ledger stream.</div></div>
+        <div class="ds"><span class="name">Two separate fee windows (classic vs Soroban)</span><div class="why">Classic fee = feeCharged/numOps; Soroban inclusion fee = feeCharged minus the refundable+non-refundable resource fees from the meta. Separating them lets getFeeStats report independent distributions clients can act on.</div></div>
+        <div class="ds"><span class="name">Buffered response writer for HTTP timeouts</span><div class="why">The downstream handler races a limit timer in a goroutine; its output is buffered so it can be discarded (→ 504) or flushed verbatim — you can't un-write bytes already sent.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to change fee-stat computation or add a percentile?</div><div class="loc"><code>computeFeeDistribution</code> + <span class="ty">FeeDistribution</span> in feewindow.go.</div></li>
+          <li><div class="task">…I need to change classic-vs-Soroban classification?</div><div class="loc"><code>FeeWindows.IngestFees</code> (the op-type switch + meta handling).</div></li>
+          <li><div class="task">…I need to adjust per-method or global limits?</div><div class="loc">Handler table in jsonrpc.go; thresholds from <code>cfg.RequestBacklog*</code> / <code>cfg.Max*ExecutionDuration</code>.</div></li>
+          <li><div class="task">…I want to reuse the sliding window for new data?</div><div class="loc"><code>NewLedgerBucketWindow[YourType]</code>.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>The ring buffer requires strictly contiguous ledger sequences — gaps are a hard error, not silently tolerated.</li>
+          <li><code>computeFeeDistribution</code> recomputes from scratch (flatten + sort) on every ingested ledger — not incremental.</li>
+          <li>Only single-op Soroban transactions count as Soroban inclusion fees; everything else is treated as classic.</li>
+          <li>Limiters are pass-through via sentinels (<code>MaxUint64</code> / max duration), <b>not</b> “0 means off.”</li>
+          <li>The fee window is populated by being registered as a fake <code>db.Migration</code> — it rides the startup replay, but it is not a schema migration (its <code>Commit</code> is a no-op).</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 12 DATASTORE ====================== -->
+    <section id="datastore">
+      <div class="sec-head"><span class="num">12</span><h2 class="sec">Datastore · xdr2json · util</h2></div>
+      <div class="sub">
+        <h3>Cold storage + small shared helpers <span class="pill both">Go + cgo</span></h3>
+        <p class="one">Serves historical ledgers from cloud cold storage when local SQLite has aged them out, plus the cgo XDR→JSON converter and the panic-handling goroutine helper.</p>
+        <p>Three loosely-related support pieces. <b>rpcdatastore</b> lets <code>getLedgers</code> reach past local retention,
+        pulling historical LCM from a remote object store (S3/GCS) via a <span class="ty">BufferedStorageBackend</span>.
+        <b>ledgerentries</b> is the live-Core read path for <code>getLedgerEntries</code>/<code>simulateTransaction</code>,
+        surfacing TTL/archival state. <b>xdr2json</b> is the thin Go wrapper over the Rust <code>libxdr2json.a</code>.
+        <b>util.panicgroup</b> decides whether an unhandled panic crashes the process or is just logged.</p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">rpcdatastore.LedgerReader</span></td><td>Read-only access to historical ledgers in object storage. <em>Same name</em> as <span class="ty">db.LedgerReader</span> but a distinct type — passed in as <code>DataStoreLedgerReader</code>.</td></tr>
+          <tr><td><span class="ty">LedgerEntryGetter</span> / <span class="ty">LedgerKeyAndEntry</span></td><td>Fetches latest (or fixed-ledger) entry values from live Core, attaching an optional <code>LiveUntilLedgerSeq</code> (TTL).</td></tr>
+          <tr><td><span class="ty">ConvertBytes</span> / <span class="ty">ConvertInterface</span></td><td>cgo entry into <code>libxdr2json.a</code> — returns <code>json.RawMessage</code> for JSON-format responses.</td></tr>
+          <tr><td><span class="ty">PanicGroup</span></td><td>Builder-style goroutine spawner: <code>NewUnrecoverablePanicGroup</code> ⇒ os.Exit(1) on panic; recoverable ⇒ log and continue.</td></tr>
+        </table>
+
+        <div class="ds"><span class="name"><code>json.RawMessage</code> return type</span><div class="why">xdr2json returns already-serialized JSON bytes (not a Go map) so the RPC layer can splice it straight into responses without a parse + re-encode round-trip — matters because some payloads (LedgerCloseMeta, TransactionMeta) are large.</div></div>
+        <div class="ds"><span class="name"><code>LiveUntilLedgerSeq</code> as <code>*uint32</code></span><div class="why">Only TTL-bearing Soroban entries have a live-until value; a pointer distinguishes “no TTL” (nil) from “TTL present,” and archived entries use a non-nil pointer to a placeholder 0 since Core doesn't report the original TTL.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to change cold-storage serving / fallback routing?</div><div class="loc"><span class="path">rpcdatastore/ledger_reader.go</span> + <code>fetchLedgers</code> in get_ledgers.go.</div></li>
+          <li><div class="task">…I need to wire/disable the datastore?</div><div class="loc"><code>mustCreateDataStore</code> + <code>createJSONRPCHandler</code> (daemon.go); gated by <code>cfg.ServeLedgersFromDatastore</code>.</div></li>
+          <li><div class="task">…I need to add an XDR type to JSON output?</div><div class="loc">Go side: xdr2json/conversion.go; Rust side: lib/xdr2json/ (the type registry).</div></li>
+          <li><div class="task">…I need to change a background goroutine's panic behavior?</div><div class="loc"><span class="path">util/panicgroup.go</span>.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>There are <b>two</b> types named <code>LedgerReader</code> — db (local SQLite) and rpcdatastore (remote). get_ledgers.go holds both.</li>
+          <li><code>GetAvailableLedgerRange</code> is currently hardcoded to <code>FirstLedger: 2</code> and doesn't query the datastore (a TODO).</li>
+          <li>getLedgers still requires a non-empty local DB even in datastore mode (datastore-only mode is a TODO).</li>
+          <li>xdr2json links the same Rust profile as preflight; a bare <code>go build</code> fails until <code>make build-libs</code>.</li>
+          <li><code>PanicGroup</code> is immutable/builder-style: <code>.Log()</code>/<code>.Counter()</code> return new copies, so you must chain.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 13 PREFLIGHT GO ====================== -->
+    <section id="preflight">
+      <div class="sec-head"><span class="num">13</span><h2 class="sec">Preflight — the Go FFI side</h2></div>
+      <div class="sub">
+        <h3>The Go half of the cgo bridge <span class="pill both">Go ⇄ cgo</span></h3>
+        <p class="one">Drives Soroban simulation in Rust over cgo, on a bounded worker pool, letting Rust call back into Go to fetch ledger entries on demand instead of copying full ledger state across the boundary.</p>
+        <p><span class="path">preflight.go</span> marshals the operation, footprint, source account, and ledger context
+        into C structs, links the platform-specific <code>libpreflight.a</code> via <code>#cgo</code> directives, and
+        invokes the Rust entry points. Critically, rather than serializing the entire ledger state to Rust, it passes
+        a <code>cgo.Handle</code> that Rust uses to call <b>back into Go</b> via the exported
+        <span class="ty">SnapshotSourceGet</span> — lazily fetching only the entries a simulation actually touches.
+        <span class="path">pool.go</span> wraps it all in a <span class="ty">WorkerPool</span> so CPU-heavy cgo calls
+        run on a fixed set of goroutines behind a bounded queue.</p>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><span class="ty">WorkerPool</span> / <span class="ty">GetPreflight</span></td><td>Fixed-size goroutine pool draining a buffered channel; a full queue returns <code>ErrPreflightQueueFull</code> via a non-blocking select.</td></tr>
+          <tr><td><span class="ty">SnapshotSourceGet</span> <span class="kind">//export func</span></td><td><b>The reverse callback.</b> Rust calls it during simulation with a LedgerKey; Go recovers the handle, fetches the entry from Core, marshals it back (ttl=-1 ⇒ missing).</td></tr>
+          <tr><td><span class="ty">snapshotSourceHandle</span></td><td>Bundles the entry getter + ctx + logger; registered via <code>cgo.NewHandle</code> to get a GC-safe opaque uintptr handed to Rust.</td></tr>
+          <tr><td><code>#cgo LDFLAGS</code></td><td>Per-OS/arch link lines pointing at <code>target/&lt;triple&gt;/release-with-panic-unwind/libpreflight.a</code>.</td></tr>
+        </table>
+
+        <div class="ds"><span class="name"><code>cgo.Handle</code> (opaque uintptr)</span><div class="why">Go pointers can't be passed into C and held across a call (the GC may move/collect them). <code>cgo.NewHandle</code> registers the handle in a process-global table and yields a stable integer safe to hand to Rust and round-trip back on each callback. This is what makes the Rust-calls-Go data-fetch pattern memory-safe.</div></div>
+        <div class="ds"><span class="name">On-demand pull vs bulk copy</span><div class="why">A full ledger snapshot can be huge, but a simulation reads only a handful of entries. Passing a callback handle lets the Rust host request one LedgerKey at a time and Go fetch just that entry — keeping the cgo boundary cheap.</div></div>
+        <div class="ds"><span class="name"><code>ttl = -1</code> sentinel</span><div class="why">A missing TTL is encoded as -1 and a zero-value entry signals “not found,” avoiding nullable-struct complications over the C ABI.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to change what data passes into/out of simulation?</div><div class="loc"><span class="ty">Parameters</span>/<span class="ty">Preflight</span> structs in preflight.go + the C structs in <span class="path">lib/preflight.h</span> + Rust <code>shared.rs</code>.</div></li>
+          <li><div class="task">…I need to change how entries are fetched during simulation?</div><div class="loc">Swap the <span class="ty">LedgerEntryGetter</span> impl; <code>SnapshotSourceGet</code> only depends on that interface.</div></li>
+          <li><div class="task">…I hit a cgo link error?</div><div class="loc">The <code>#cgo LDFLAGS</code> block at the top of preflight.go — run <code>make build-libs</code> first.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li><code>SnapshotSourceGet</code> is called <em>by Rust during</em> the cgo call — the inversion of the usual Go→C direction, and the core trick of the subsystem.</li>
+          <li>Never pass a raw Go pointer to Rust; <code>handle.Delete()</code> is deferred so the handle lives exactly one simulation.</li>
+          <li>C memory must be freed explicitly in both directions — forgetting leaks across the boundary.</li>
+          <li>The <code>release-with-panic-unwind</code> profile in the link path is deliberate: it lets Rust catch panics and surface them as errors instead of aborting the daemon.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 14 RUST ====================== -->
+    <section id="rust">
+      <div class="sec-head"><span class="num">14</span><h2 class="sec">Rust libraries &amp; the prev/curr dual-protocol pattern</h2></div>
+      <div class="sub">
+        <h3>★ The most distinctive design in the repo <span class="pill rust">Rust</span></h3>
+        <p class="one">Three Rust staticlibs run Soroban simulation and XDR→JSON, with a parametric-module hack that mounts the same simulation code against two soroban versions so one binary serves both the current and next protocol.</p>
+        <p>The network upgrades protocols on a flag-day, so the RPC must simulate against <b>both</b> the outgoing and
+        incoming protocol from a single binary. Rust lacks parametric modules — so the code mounts the same
+        <span class="path">shared.rs</span> at two module paths and binds each to a differently-versioned copy of soroban.</p>
+
+        <h4>How the trick works</h4>
+        <div class="grid2" style="margin-top:6px">
+          <div class="card"><h5>1 · Dependencies, twice</h5><p>The workspace <span class="path">Cargo.toml</span> uses Cargo's <code>package =</code> rename to pull <code>soroban-env-host</code> in twice: as <code>soroban-env-host-prev</code> and <code>-curr</code> (likewise <code>soroban-simulation</code>). Two protocol versions, co-resident in one static lib.</p></div>
+          <div class="card"><h5>2 · Same code, two mounts</h5><p><span class="path">lib.rs</span> declares <code>#[path = "."] mod curr</code> and <code>mod prev</code>, each re-exporting its own soroban version under neutral names and mounting <code>shared.rs</code>. <code>shared.rs</code> imports soroban via <code>super::</code>, so each copy compiles against a different version.</p></div>
+          <div class="card"><h5>3 · Dispatch at runtime</h5><p>The <code>extern "C"</code> entry points read <code>ledger_info.protocol_version</code>: <code>≤ prev::PROTOCOL</code> → prev path (also handles older), <code>== curr::PROTOCOL</code> → curr, else error. This is how the binary keeps serving through an upgrade.</p></div>
+          <div class="card"><h5>4 · Bump = move curr→prev</h5><p>A protocol cutover moves the curr versions into the prev entries and sets a new curr. <span class="path">scripts/update-soroban-env.sh</span> automates the curr bump on the protocol-next branch.</p></div>
+        </div>
+
+        <h4>Key abstractions</h4>
+        <table class="abs">
+          <tr><th>Name</th><th>What it is</th></tr>
+          <tr><td><code>mod curr</code> / <code>mod prev</code></td><td>The twice-mounted modules; each exposes a <code>PROTOCOL</code> const from its soroban <code>INTERFACE_VERSION</code>.</td></tr>
+          <tr><td><code>preflight_invoke_hf_op</code> / <code>preflight_footprint_ttl_op</code></td><td>The two <code>#[no_mangle] extern "C"</code> entry points Go calls; both run inside <code>catch_preflight_panic</code>.</td></tr>
+          <tr><td><span class="ty">catch_preflight_panic</span></td><td>Runs each op on a scoped worker thread with a 100 MiB stack and catches panics, converting them to a result error rather than crossing the C boundary.</td></tr>
+          <tr><td><span class="ty">GoLedgerStorage</span></td><td>Implements soroban's <code>SnapshotSource</code> trait so simulation fetches entries on demand by calling back into Go.</td></tr>
+          <tr><td><span class="ty">CXDR</span> + ffi helpers</td><td>The shared <code>lib/ffi</code> crate owns the <code>{*mut u8, len}</code> blob type and the C-string/XDR alloc-free helpers used by both Rust libs.</td></tr>
+        </table>
+
+        <div class="ds"><span class="name">Twice-mounted <code>shared.rs</code> (parametric-module emulation)</span><div class="why">Rust has no parametric modules, but the RPC must link two soroban releases at once. Including the same file at two module paths — each given a different soroban binding — is the workaround. Any function mentioning a soroban type must live in <code>shared.rs</code> as a free function (it's compiled twice); version-agnostic code stays in <code>lib.rs</code>.</div></div>
+        <div class="ds"><span class="name">CXDR blob currency</span><div class="why">Rather than per-type FFI structs, the boundary passes opaque length-prefixed byte buffers in both directions; each side serializes/deserializes XDR with its own soroban version.</div></div>
+        <div class="ds"><span class="name">100 MiB dedicated thread + catch_unwind</span><div class="why">Soroban invocations can recurse deeply (overflowing the ~8 MiB default stack), and an unwinding panic crossing the C boundary is undefined behavior. Each op runs on a scoped 100 MiB-stack thread wrapped in <code>catch_unwind</code> — requiring the custom <code>release-with-panic-unwind</code> profile.</div></div>
+
+        <details><summary>Where do I look when…</summary><div class="body"><ul class="wl">
+          <li><div class="task">…I need to bump the current protocol's soroban version?</div><div class="loc">Run <span class="path">scripts/update-soroban-env.sh</span> (also wired into update-soroban-env.yml).</div></li>
+          <li><div class="task">…I need a full protocol cutover (curr→prev)?</div><div class="loc">Workspace <span class="path">Cargo.toml</span>: move curr versions into the prev entries, set new curr. Usually no Rust code change — only adjust per-lane <code>load_network_config</code> if the new curr's signature differs.</div></li>
+          <li><div class="task">…I need to add data returned from simulation?</div><div class="loc">Add to <span class="ty">CPreflightResult</span> (lib.rs) + populate in shared.rs + free in <code>free_preflight_result</code> + read on the Go side.</div></li>
+          <li><div class="task">…I need to add an XDR type to JSON conversion?</div><div class="loc"><span class="path">lib/xdr2json/src/lib.rs</span> (<code>xdr_to_json</code>); Go caller in xdr2json/conversion.go.</div></li>
+        </ul></div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>The dispatch is asymmetric: <code>prev</code> uses <code>≤</code> (handles all older protocols), <code>curr</code> uses <code>==</code>. Newer-than-curr errors.</li>
+          <li><code>shared.rs</code> must import soroban types from <code>super::</code>, NOT <code>crate::</code> — that indirection is the entire mechanism binding each copy to a different version.</li>
+          <li>Any function whose signature mentions a soroban type must be a free function in shared.rs (it's compiled twice; you can't define the same method twice).</li>
+          <li>The build is hard-gated on the <code>release-with-panic-unwind</code> profile (<code>panic='unwind'</code>) — a normal release build would abort on panic and risk UB across the boundary.</li>
+          <li>Memory ownership is split: Rust-allocated results are freed by Rust; Go-allocated entries are freed by Go. Freeing across the boundary is undefined.</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 15 BUILD ====================== -->
+    <section id="build">
+      <div class="sec-head"><span class="num">15</span><h2 class="sec">Build, test &amp; CI</h2></div>
+      <div class="sub">
+        <h3>The hybrid build reality <span class="pill both">Make · Go · Rust</span></h3>
+        <p class="one">A Makefile-driven Go+Rust build where the Rust static libs MUST be built before any cgo-linked Go build/test; golangci-lint + clippy gates; a Docker-Compose harness that boots real Stellar Core.</p>
+        <p>The daemon links two Rust static libs (<code>libpreflight.a</code>, <code>libxdr2json.a</code>) over cgo, so a
+        plain <code>go build</code>/<code>go test</code> <b>fails</b> until those libs exist. The Makefile builds the
+        Rust libs first and injects version metadata via ldflags. Because every CI workflow calls the same Makefile
+        targets, <b>understanding the Makefile is understanding CI.</b></p>
+
+        <h4>The targets you'll actually use</h4>
+        <div class="cmd">
+<span class="c"># build the Rust libs — REQUIRED before any go build/test</span>
+<span class="k">make</span> build-libs
+<span class="c"># build the daemon (build-libs + go build with version ldflags)</span>
+<span class="k">make</span> build
+<span class="c"># run a single Go test (after build-libs once)</span>
+go test -run TestName ./cmd/stellar-rpc/internal/methods/...
+<span class="c"># full test + lint</span>
+<span class="k">make</span> test   <span class="c"># go-test + rust-test</span>
+<span class="k">make</span> check  <span class="c"># rust-check (fmt+clippy) + go-check (golangci-lint)</span>
+        </div>
+
+        <div class="ds"><span class="name">build-libs before everything</span><div class="why">cgo links the archives at <code>target/&lt;arch&gt;/release-with-panic-unwind/</code>; they don't exist until cargo builds them. This is the single most common stumble.</div></div>
+        <div class="ds"><span class="name">Version via <code>cargo metadata</code> + ldflags</span><div class="why">The soroban-env prev/curr version strings are Rust deps Go can't see, so the Makefile parses <code>cargo metadata</code> with jq and injects them via <code>-ldflags -X</code> — surfaced by <code>stellar-rpc version</code>.</div></div>
+        <div class="ds"><span class="name">Embedded XDR upgrade fixtures</span><div class="why">Integration tests apply Soroban network limits from pre-encoded ConfigUpgradeSet XDR blobs (<code>//go:embed docker/upgrades/*.xdr</code>), versioned per protocol (p25/p26) because limit schemas change across protocols.</div></div>
+
+        <div class="toptip" style="background:var(--gold-soft);border-color:#e7d3a6">
+          <b>Two golangci-lint rules that bite:</b> (1) do <em>not</em> import <code>go-stellar-sdk/support/errors</code> — use stdlib <code>errors</code> + <code>fmt.Errorf</code>; (2) no debug prints (<code>fmt.Print*</code>, <code>print</code>, <code>println</code>) — in tests use <code>t.Log()</code>.
+        </div>
+
+        <details><summary>Integration tests (gated, real Core)</summary><div class="body">
+          <p style="font-size:14px;margin:4px 0">They spin up real Stellar Core + history archive + friendbot via Docker Compose and run a full daemon, gated behind env vars so they never run during a normal <code>go test ./...</code>. The harness (<span class="path">integrationtest/infrastructure/</span>) drives protocol upgrades and Soroban-limit upgrades from embedded XDR fixtures.</p>
+          <div class="cmd">
+STELLAR_RPC_INTEGRATION_TESTS_ENABLED=true \
+STELLAR_RPC_INTEGRATION_TESTS_CORE_MAX_SUPPORTED_PROTOCOL=23 \
+STELLAR_RPC_INTEGRATION_TESTS_CAPTIVE_CORE_BIN=$(which stellar-core) \
+    go test -v -failfast ./cmd/stellar-rpc/internal/integrationtest/...
+          </div>
+        </div></details>
+        <details><summary>Gotchas</summary><div class="body"><ul class="gotchas">
+          <li>A bare <code>go build</code> reports version <code>dev</code> (no ldflags). Fine for local iteration, not releases.</li>
+          <li>The Core docker image is pinned to an immutable tag — captive-core must stay compatible with the containerized Core.</li>
+          <li>On macOS the Makefile passes <code>-mmacosx-version-min=13.0</code> to align the Go and Rust linkers.</li>
+          <li><span class="path">docs/</span> is auto-generated — don't hand-edit it.</li>
+          <li>User-facing changes go in <span class="path">CHANGELOG.md</span> (there's a <code>/changelog</code> skill).</li>
+        </ul></div></details>
+      </div>
+    </section>
+
+    <!-- ====================== 16 DATA STRUCTURES ====================== -->
+    <section id="datastructures">
+      <div class="sec-head"><span class="num">16</span><h2 class="sec">★ Special data structures, collected</h2></div>
+      <p>These are the design choices driven by <b>the nature of the data</b> — the ones worth understanding before
+      you touch the hot paths. They recur across the deep dives; here they are in one place.</p>
+
+      <div class="grid2" style="margin-top:18px">
+        <div class="card" style="border-left:4px solid var(--gold)">
+          <h5>Raw LCM blob = source of truth</h5>
+          <p>A ledger's full content is large XDR, stored <em>once</em> as a BLOB keyed by sequence. Transaction/event tables hold only pointers; full objects are re-derived from the blob at read time. <span class="muted">→ §9</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--gold)">
+          <h5>Event cursor AS the primary key</h5>
+          <p>A zero-padded <code>&lt;TOID&gt;-&lt;event&gt;</code> string so lexicographic order = chronological order. Range scans, <code>ORDER BY</code>, and retention <code>DELETE</code>s are all plain string comparisons. <span class="muted">→ §7, §9</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--gold)">
+          <h5>TOID sentinel event slots</h5>
+          <p>Pre-tx / per-op / post-tx / post-all-txs stages share one cursor scheme via reserved min/max-mask positions — keeping them sortable <em>and</em> trimmable within a single ledger. <span class="muted">→ §9</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--gold)">
+          <h5>Four topic columns + composite indexes</h5>
+          <p>Up to 4 Soroban event topics, each its own indexed column; <code>(topic1, id)</code> / <code>(contract_id, id)</code> composites keep filtered scans in cursor order. <span class="muted">→ §7, §9</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--rust)">
+          <h5>Twice-mounted <code>shared.rs</code></h5>
+          <p>Emulates parametric modules so one binary links two soroban versions and serves both protocols across a flag-day upgrade. <span class="muted">→ §14</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--rust)">
+          <h5>On-demand snapshot via <code>cgo.Handle</code></h5>
+          <p>Rust calls back into Go for one LedgerKey at a time, so full ledger state never crosses the FFI boundary. A GC-safe opaque handle makes it sound. <span class="muted">→ §8, §13</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--rust)">
+          <h5>CXDR blob currency</h5>
+          <p>One opaque <code>{ptr, len}</code> byte-buffer type carries every Stellar value across cgo, in both directions — no per-type FFI structs. <span class="muted">→ §13, §14</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--go)">
+          <h5>Ring buffer fee window</h5>
+          <p>Generic <code>LedgerBucketWindow[T]</code> — O(1) append-with-eviction, fixed memory, asserts contiguity. Two windows (classic vs Soroban) feed cached percentiles. <span class="muted">→ §11</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--go)">
+          <h5>Two Core clients</h5>
+          <p>Normal (submit/info) vs a fast client on Core's HTTP query port for latency-sensitive entry reads &amp; simulation. <span class="muted">→ §4</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--go)">
+          <h5>Batched INSERTs</h5>
+          <p>Tuned to SQLite's ~32.7k bind-variable cap: 3,000 tx rows (3 vars), 1,000 event rows (10 vars). <span class="muted">→ §9</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--go)">
+          <h5>Monotonic backfill backends</h5>
+          <p>The cloud-datastore backend is forward-only, so backward fill creates a fresh backend per chunk while forward fill reuses one. <span class="muted">→ §10</span></p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--go)">
+          <h5>Restore preamble (dual tx data)</h5>
+          <p>Simulation returns a separate SorobanTransactionData for a prerequisite <code>RestoreFootprint</code> when an entry is archived. <span class="muted">→ §8</span></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================== 17 WHERE INDEX ====================== -->
+    <section id="whereindex">
+      <div class="sec-head"><span class="num">17</span><h2 class="sec">“Where do I look when…?”</h2></div>
+      <p>The master navigational index — every “if you need to change X, look here” pointer from the deep dives,
+      in one searchable place. Type to filter.</p>
+      <input class="filter" id="wlFilter" type="text" placeholder="Filter — e.g. “add a method”, “retention”, “protocol”, “cursor”, “metric”…" />
+      <div id="wlIndex"></div>
+      <div class="nores" id="wlNoRes" style="display:none">No matches — try a broader term.</div>
+    </section>
+
+    <!-- ====================== 18 GETTING STARTED ====================== -->
+    <section id="start">
+      <div class="sec-head"><span class="num">18</span><h2 class="sec">Getting started</h2></div>
+      <p>A first-day checklist that respects the hybrid build.</p>
+      <ol style="font-size:15px;line-height:1.9">
+        <li><b>Build the Rust libs once:</b> <code>make build-libs</code>. Without this, every <code>go build</code>/<code>go test</code> fails on missing <code>libpreflight.a</code>.</li>
+        <li><b>Build the daemon:</b> <code>make build</code> (gets you real version metadata via ldflags).</li>
+        <li><b>Read <span class="path">daemon.go</span>'s <span class="ty">MustNew</span></b> top-to-bottom — it's the table of contents for the whole system.</li>
+        <li><b>Trace one read end-to-end</b> — e.g. <code>getEvents</code>: jsonrpc.go registration → methods/get_events.go → db/event.go.</li>
+        <li><b>Trace one simulation</b> — methods/simulate_transaction.go → preflight/pool.go → preflight/preflight.go (cgo) → lib/preflight/shared.rs, watching <code>SnapshotSourceGet</code> call back into Go.</li>
+        <li><b>Run unit tests:</b> <code>make go-test</code>. For integration tests, set the gating env vars (§15) and have <code>stellar-core</code> + Docker available.</li>
+        <li><b>Before a PR:</b> <code>make check</code> (clippy + golangci-lint). Remember the two lint rules: no <code>support/errors</code>, no debug prints.</li>
+      </ol>
+
+      <div class="toptip">
+        <b>One-line mental model.</b> <em>Captive Core feeds an ingestion loop that stores raw ledger blobs + thin
+        indexes in retention-trimmed SQLite; a JSON-RPC server answers reads from that store (and live Core), while
+        a Rust sandbox over cgo simulates Soroban calls by pulling ledger entries back through Go on demand — all
+        from one binary that links two protocol versions of the soroban host at once.</em>
+      </div>
+
+      <footer>
+        <p><b>Stellar RPC — Developer Field Guide.</b> Reverse-engineered from the codebase to help new contributors
+        find their way. File/line references point into <span class="path">cmd/stellar-rpc/</span> and reflect the
+        repository at the time of writing — verify against current source before relying on a specific line.
+        For build/test conventions see <span class="path">CLAUDE.md</span>; for architecture prose see the project README.</p>
+      </footer>
+    </section>
+  </main>
+</div>
+
+<button class="totop" id="totop" aria-label="Back to top">↑</button>
+
+<script>
+// ---- where-to-look master index data ----
+const WL = [
+  {g:"04 · Daemon lifecycle", items:[
+    ["Add a subsystem or change start order","MustNew (daemon.go:175) + a field on the Daemon struct (daemon.go:52)"],
+    ["Change graceful shutdown order","Daemon.close (daemon.go:88)"],
+    ["Point a feature at a different Core endpoint","createStellarCoreClient / createHighperfStellarCoreClient (daemon.go:304–316)"],
+    ["Add a process-level metric or pprof endpoint","registerMetrics (metrics.go) · createAdminMux (daemon.go:408)"],
+    ["Change startup migration / fee-window warm-up","mustInitializeStorage (daemon.go:423), buildMigrations (daemon.go:496)"],
+  ]},
+  {g:"05 · Configuration", items:[
+    ["Add a new config setting","Add a Config field (main.go) + an Option literal in cfg.options() (options.go)"],
+    ["Change a default value","DefaultValue on the relevant Option in options.go"],
+    ["Add validation or a cross-field constraint","The Option.Validate hook in options.go"],
+    ["Support a non-string/custom type","CustomSetValue + MarshalTOML hooks (model on log-format/network)"],
+    ["Change flag/env/file precedence","Config.SetValues (main.go:100)"],
+    ["Fix the reported version/build metadata","version.go vars + GOLDFLAGS/RS_ENV_VERSION in the Makefile"],
+  ]},
+  {g:"06 · JSON-RPC transport", items:[
+    ["Add a new RPC method","Handlers slice in NewJSONRPCHandler (jsonrpc.go) + methods/<name>.go + protocol constants in go-stellar-sdk + config limits"],
+    ["Change per-method concurrency or timeout limits","cfg.RequestBacklog*QueueLimit / cfg.Max*ExecutionDuration in the handlers slice; network/backlogQ.go + requestdurationlimiter.go"],
+    ["Change xdrFormat (json vs base64) behavior","go-stellar-sdk protocols/rpc/format.go + each handler's switch on request.Format + methods/json.go"],
+    ["Adjust CORS, request-size cap, or mount point","Bottom of NewJSONRPCHandler; createHTTPHandler (daemon.go)"],
+    ["Find or rename a metric","decorateHandlers builds request_duration_seconds; the registration loop builds the per-method gauges/counters"],
+  ]},
+  {g:"07 · Read / query methods", items:[
+    ["Change pagination / next-cursor logic","get_events.go (start/end + cursor emit); get_transactions.go initializePagination; cursor.go in go-stellar-sdk"],
+    ["Add or modify an event filter (contract/type/topic)","combineContractIDs/EventTypes/Topics in get_events.go + SQL assembly in db/event.go GetEvents"],
+    ["Change where ledger entries are read from","ledgerentries/main.go (coreLedgerEntryGetter); fast client interface in daemon/interfaces"],
+    ["Change getLedgers local/datastore fetch split","get_ledgers.go fetchLedgers"],
+    ["Tweak XDR↔JSON formatting for a read method","methods/json.go + each handler's switch format block"],
+    ["Change how a transaction is located by hash","db/transaction.go getTransactionByHash (hash join + application_order seek)"],
+  ]},
+  {g:"08 · Simulate & submit", items:[
+    ["Change which ops/validation simulate accepts","NewSimulateTransactionHandler in simulate_transaction.go"],
+    ["Add/modify a field in the simulate response","formatResponse / getSimulationResults / getRestorePreamble in simulate_transaction.go (mirror in Rust shared.rs)"],
+    ["Adjust auth-mode inference","validateAuthMode in simulate_transaction.go; FFI enum mapping in preflight.go"],
+    ["Change submission status mapping / error decoding","the status switch in send_transaction.go"],
+    ["Tune simulation concurrency / queue capacity","createPreflightWorkerPool (daemon.go) + config PreflightWorkerCount / PreflightWorkerQueueSize"],
+  ]},
+  {g:"09 · SQLite store", items:[
+    ["Add or change the schema (table/column/index)","Add a numbered file in db/sqlmigrations/ (auto-embedded via //go:embed)"],
+    ["Change retention/trimming logic","trimLedgers (ledger.go), trimTransactions (transaction.go), trimEvents (event.go) — called from writeTx.Commit"],
+    ["Change how a transaction is hydrated","getTransactionByHash and ParseTransaction in transaction.go"],
+    ["Change event indexing, cursors, or topic filtering","InsertEvents/GetEvents in event.go; cursor encoding in go-stellar-sdk cursor.go"],
+    ["Add a one-time backfill of an index table","Register a migration in BuildMigrations (migration.go) — metadata guard makes it idempotent"],
+    ["Change WAL / checkpoint behavior","openSQLiteDB DSN pragmas + postCommit closure (db.go)"],
+    ["Write a unit test without a real SQLite DB","db/mocks.go (NewMockTransactionStore / NewMockLedgerReader)"],
+  ]},
+  {g:"10 · Ingestion & backfill", items:[
+    ["Change what gets written per ledger","Service.ingestLedgerCloseMeta (covers live + backfill)"],
+    ["Change startup resume / catch-up","Service.getNextLedgerSequence / Service.run"],
+    ["Tune ingestion retry / failure handling","Service.Start (backoff) + OnIngestionRetry in daemon.go"],
+    ["Change backfill chunk size / memory footprint","ChunkSize const + makeBackend sizing (backfill.go)"],
+    ["Change which ranges backfill loads","BackfillMeta.setBounds + verifyBounds (backfill.go)"],
+    ["Change how fees are extracted into the windows","FeeWindows.IngestFees (feewindow.go)"],
+  ]},
+  {g:"11 · Fee windows & limiters", items:[
+    ["Add a new percentile or change fee-stat computation","computeFeeDistribution + FeeDistribution (feewindow.go); convertFeeDistribution (get_fee_stats.go)"],
+    ["Change classic-vs-Soroban classification / fee extraction","FeeWindows.IngestFees (op-type switch + SorobanTransactionMetaExt handling)"],
+    ["Tune fee-window vs history retention sizing","buildMigrations / mustInitializeStorage (daemon.go) + config retention windows"],
+    ["Reuse the sliding-ledger-window for new data","NewLedgerBucketWindow[YourType] (ledgerbucketwindow.go)"],
+    ["Adjust per-method or global queue/duration limits","Handler table in jsonrpc.go; cfg thresholds"],
+    ["Change rejection behavior / error codes for overload","network/backlogQ.go (503) and network/requestdurationlimiter.go (504 / -32001)"],
+  ]},
+  {g:"12 · Datastore · xdr2json · util", items:[
+    ["Change how/when history is served from cold storage","rpcdatastore/ledger_reader.go + fetchLedgers in get_ledgers.go"],
+    ["Wire/disable the datastore (S3/GCS, schema)","mustCreateDataStore + createJSONRPCHandler (daemon.go); cfg.ServeLedgersFromDatastore"],
+    ["Change ledger-entry fetching / TTL / archival handling","ledgerentries/main.go (coreLedgerEntryGetter.GetLedgerEntries)"],
+    ["Add a new XDR type to JSON output","xdr2json/conversion.go (Go) → lib/xdr2json/ (Rust type registry)"],
+    ["Change a background goroutine's panic behavior","util/panicgroup.go"],
+  ]},
+  {g:"13 · Preflight (Go FFI)", items:[
+    ["Change data passed into/out of simulation","Parameters/Preflight structs (preflight.go) + lib/preflight.h + Rust shared.rs"],
+    ["Change how entries are fetched during simulation","Swap the ledgerentries.LedgerEntryGetter; SnapshotSourceGet depends only on the interface"],
+    ["Fix a cgo / linker error per platform","#cgo LDFLAGS block atop preflight.go — run make build-libs first"],
+    ["Add a new operation type to simulate","Dispatch switch in GetPreflight (preflight.go) + a Rust entry point"],
+    ["Add/adjust preflight Prometheus metrics","NewPreflightWorkerPool metric defs + metricsLedgerEntryGetterWrapper (pool.go)"],
+  ]},
+  {g:"14 · Rust libs & dual-protocol", items:[
+    ["Bump the current protocol's soroban version","Run scripts/update-soroban-env.sh (wired into update-soroban-env.yml)"],
+    ["Perform a full protocol cutover (curr→prev)","Workspace Cargo.toml: move curr→prev, set new curr; adjust per-lane load_network_config if signature changed"],
+    ["Add or change data returned from simulation","CPreflightResult (lib.rs) + new_cpreflight_result_from_* (shared.rs) + free_preflight_result (lib.rs) + Go side"],
+    ["Adjust simulation stack size or panic handling","SIMULATION_THREAD_STACK_SIZE + catch_preflight_panic (lib.rs); keep panic='unwind'"],
+    ["Add an XDR type to JSON conversion","lib/xdr2json/src/lib.rs xdr_to_json; Go caller in xdr2json/conversion.go"],
+  ]},
+  {g:"15 · Build, test, CI", items:[
+    ["Add or change a build/test/lint command","Makefile — CI calls Makefile targets, so update there"],
+    ["Fix a cgo link error on go build/test","Run make build-libs first (libpreflight.a + libxdr2json.a under target/<arch>/release-with-panic-unwind/)"],
+    ["Resolve a golangci-lint failure (prints / support/errors)","Use t.Log() not fmt.Println; stdlib errors + fmt.Errorf not go-stellar-sdk/support/errors"],
+    ["Add a new integration test","integrationtest/<name>_test.go calling infrastructure.NewTest(t, &TestConfig{...})"],
+    ["Change daemon config used in integration tests","rpcConfig.toMap() in infrastructure/test.go + TestConfig fields"],
+    ["Bump the Core version used by integration tests","CORE_IMAGE in docker-compose.yml + core_deb_version/core_docker_img in stellar-rpc.yml"],
+    ["Add/update a protocol or limit upgrade fixture","docker/upgrades/ + docker/README.md (regenerate with `stellar xdr encode`)"],
+  ]},
+];
+
+// render index
+(function(){
+  const root = document.getElementById('wlIndex');
+  WL.forEach(grp=>{
+    const g = document.createElement('div'); g.className='idx-grp';
+    const lbl = document.createElement('div'); lbl.className='lbl'; lbl.textContent=grp.g; g.appendChild(lbl);
+    grp.items.forEach(([task,loc])=>{
+      const row=document.createElement('div'); row.className='idx-row';
+      row.setAttribute('data-text',(grp.g+' '+task+' '+loc).toLowerCase());
+      row.innerHTML='<div class="task"></div><div class="loc"></div>';
+      row.querySelector('.task').textContent=task;
+      row.querySelector('.loc').textContent=loc;
+      g.appendChild(row);
+    });
+    root.appendChild(g);
+  });
+})();
+
+// filter
+const wlFilter=document.getElementById('wlFilter');
+const wlNoRes=document.getElementById('wlNoRes');
+wlFilter.addEventListener('input',()=>{
+  const q=wlFilter.value.trim().toLowerCase();
+  let anyShown=false;
+  document.querySelectorAll('#wlIndex .idx-grp').forEach(grp=>{
+    let groupShown=false;
+    grp.querySelectorAll('.idx-row').forEach(row=>{
+      const match=!q || row.getAttribute('data-text').includes(q);
+      row.style.display=match?'block':'none';
+      if(match){groupShown=true;anyShown=true;}
+    });
+    grp.style.display=groupShown?'block':'none';
+  });
+  wlNoRes.style.display=anyShown?'none':'block';
+});
+
+// scrollspy
+const links=[...document.querySelectorAll('#toc a')];
+const map={}; links.forEach(a=>{const id=a.getAttribute('href').slice(1); map[id]=a;});
+const obs=new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      links.forEach(l=>l.classList.remove('active'));
+      const a=map[e.target.id]; if(a)a.classList.add('active');
+    }
+  });
+},{rootMargin:'-20% 0px -70% 0px',threshold:0});
+document.querySelectorAll('main section, main#top').forEach(s=>obs.observe(s));
+
+// mobile nav
+const side=document.getElementById('side'), scrim=document.getElementById('scrim'), menuBtn=document.getElementById('menuBtn');
+function closeNav(){side.classList.remove('open');scrim.classList.remove('show');}
+menuBtn.addEventListener('click',()=>{side.classList.toggle('open');scrim.classList.toggle('show');});
+scrim.addEventListener('click',closeNav);
+document.querySelectorAll('#toc a').forEach(a=>a.addEventListener('click',closeNav));
+
+// back to top
+const totop=document.getElementById('totop');
+window.addEventListener('scroll',()=>{ totop.classList.toggle('show', window.scrollY>600); });
+totop.addEventListener('click',()=>window.scrollTo({top:0,behavior:'smooth'}));
+</script>
+</body>
+</html>

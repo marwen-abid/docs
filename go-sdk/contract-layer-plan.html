@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>A high-level contract layer for the Go SDK · the plan</title>
+  <style>
+    :root {
+      --bg: #faf8f4;
+      --bg-tint: #f4efe6;
+      --ink: #1a1a1a;
+      --ink-soft: #4a4a4a;
+      --ink-faint: #7a7468;
+      --rule: #d8d2c4;
+      --rule-soft: #ebe6dc;
+      --accent: #c14b27;
+      --accent-deep: #9a3a1c;
+      --accent-soft: #f3e7e0;
+      --teal: #2a6f6b;
+      --teal-soft: #e0eeec;
+      --code-bg: #0f1115;
+      --code-ink: #e3e1d8;
+      --code-key: #c8a96a;
+      --code-str: #93c47d;
+      --code-com: #6c7a89;
+      --code-fn:  #7fb3d5;
+      --code-type:#d98e5d;
+      --code-num: #c89cd9;
+      --good: #2e7d3a;
+      --warn: #b07b00;
+      --muted-bg: #f1ece2;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+      font-size: 17px;
+      line-height: 1.58;
+      -webkit-font-smoothing: antialiased;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 248px minmax(0, 770px);
+      gap: 56px;
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 56px 32px 140px;
+    }
+
+    /* ---- Table of contents ---- */
+    nav.toc {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: var(--ink-soft);
+      border-left: 1px solid var(--rule);
+      padding-left: 18px;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
+    }
+    nav.toc h4 {
+      margin: 0 0 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink);
+    }
+    nav.toc ol { list-style: none; margin: 0 0 18px; padding: 0; counter-reset: tocnum; }
+    nav.toc ol li { counter-increment: tocnum; margin: 7px 0; }
+    nav.toc ol li::before {
+      content: counter(tocnum, decimal-leading-zero);
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+      margin-right: 8px;
+      font-size: 11px;
+    }
+    nav.toc .grouplabel {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--ink-faint); margin: 16px 0 6px;
+    }
+    nav.toc a { color: var(--ink-soft); text-decoration: none; }
+    nav.toc a:hover { color: var(--accent); }
+
+    main { min-width: 0; }
+
+    /* ---- Header ---- */
+    .eyebrow {
+      font-family: "Inter", sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    h1 {
+      font-family: "Iowan Old Style", Georgia, serif;
+      font-size: 45px;
+      line-height: 1.06;
+      margin: 6px 0 14px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+    }
+    .deck {
+      font-size: 19px;
+      color: var(--ink-soft);
+      line-height: 1.5;
+      max-width: 62ch;
+      margin: 0 0 28px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 26px;
+      border-top: 1px solid var(--rule);
+      border-bottom: 1px solid var(--rule);
+      padding: 14px 0;
+      margin: 0 0 36px;
+      font-family: "Inter", sans-serif;
+      font-size: 12.5px;
+    }
+    .meta dt { font-weight: 600; color: var(--ink); margin-right: 6px; }
+    .meta dd { margin: 0; color: var(--ink-soft); }
+    .meta-pair { display: flex; gap: 6px; }
+
+    /* ---- Headings ---- */
+    h2 {
+      font-family: "Iowan Old Style", Georgia, serif;
+      font-size: 29px;
+      font-weight: 600;
+      margin: 70px 0 8px;
+      letter-spacing: -0.01em;
+      scroll-margin-top: 24px;
+    }
+    h2 .num {
+      color: var(--accent);
+      font-family: "Inter", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      display: block;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+    }
+    h3 {
+      font-family: "Inter", sans-serif;
+      font-size: 17px;
+      font-weight: 600;
+      margin: 36px 0 8px;
+      color: var(--ink);
+    }
+    h4 {
+      font-family: "Inter", sans-serif;
+      font-size: 12.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin: 24px 0 6px;
+    }
+    p { margin: 0 0 14px; }
+    strong { font-weight: 600; }
+    em { font-style: italic; }
+    a { color: var(--accent-deep); }
+
+    /* ---- Inline code ---- */
+    code {
+      font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+      font-size: 13.5px;
+      background: var(--muted-bg);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: var(--ink);
+      word-break: break-word;
+    }
+
+    /* ---- Code blocks ---- */
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 7px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+      font-size: 12.7px;
+      line-height: 1.6;
+      margin: 16px 0 20px;
+      box-shadow: 0 0 0 1px #20232a inset;
+    }
+    pre code { background: transparent; padding: 0; color: inherit; font-size: inherit; }
+    pre .filehead {
+      display:block; color: var(--code-com); font-size: 11px; letter-spacing: 0.04em;
+      border-bottom: 1px solid #20232a; margin: -2px 0 10px; padding-bottom: 6px;
+    }
+    .k  { color: var(--code-key); }
+    .s  { color: var(--code-str); }
+    .c  { color: var(--code-com); font-style: italic; }
+    .fn { color: var(--code-fn);  }
+    .t  { color: var(--code-type); }
+    .n  { color: var(--code-num); }
+
+    /* ---- Callouts ---- */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 13px 18px;
+      margin: 20px 0;
+      font-size: 15px;
+      border-radius: 0 4px 4px 0;
+    }
+    .callout.neutral { border-color: var(--rule); background: var(--muted-bg); }
+    .callout.teal { border-color: var(--teal); background: var(--teal-soft); }
+    .callout .label {
+      font-family: "Inter", sans-serif;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .callout.neutral .label { color: var(--ink-soft); }
+    .callout.teal .label { color: var(--teal); }
+    .callout p:last-child { margin-bottom: 0; }
+
+    /* ---- Tables ---- */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "Inter", sans-serif;
+      font-size: 13px;
+      margin: 16px 0 24px;
+    }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+    th { border-bottom: 1px solid var(--ink); font-weight: 600; color: var(--ink); }
+    td code { font-size: 12px; }
+
+    /* ---- Chips ---- */
+    .chip {
+      display: inline-block;
+      font-family: "Inter", sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--muted-bg);
+      color: var(--ink-soft);
+      margin-right: 4px;
+      vertical-align: 1px;
+    }
+    .chip.accent  { background: var(--accent-soft); color: var(--accent); }
+    .chip.good    { background: #e6f1e6; color: var(--good); }
+    .chip.warn    { background: #fbf0d0; color: var(--warn); }
+    .chip.teal    { background: var(--teal-soft); color: var(--teal); }
+
+    /* ---- Layer stack ---- */
+    .stack { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin: 16px 0 28px; background: #fff; }
+    .stack .row {
+      padding: 11px 16px; border-bottom: 1px solid var(--rule-soft);
+      font-family: "Inter", sans-serif; font-size: 14px; display: flex; align-items: center; gap: 14px;
+    }
+    .stack .row:last-child { border-bottom: 0; }
+    .stack .row .tag {
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+      width: 86px; flex-shrink: 0;
+    }
+    .stack .row.this { background: var(--accent-soft); }
+    .stack .row.this .tag { color: var(--accent); }
+    .stack .row.foundation { background: var(--muted-bg); }
+    .stack .row.foundation .tag { color: var(--ink-soft); }
+    .stack .row .what { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 12.5px; font-weight: 600; width: 160px; flex-shrink: 0; }
+    .stack .row .note { font-family: "Iowan Old Style", Georgia, serif; color: var(--ink-soft); flex: 1; font-size: 13.5px; }
+
+    /* ---- Lifecycle "lit spine" ---- */
+    .spine {
+      background: var(--muted-bg); border: 1px solid var(--rule); border-radius: 8px;
+      padding: 22px 18px; margin: 16px 0 10px; overflow-x: auto;
+    }
+    .spine .track { display: flex; align-items: stretch; gap: 0; font-family: "Inter", sans-serif; min-width: 640px; }
+    .spine .node {
+      flex: 1; text-align: center; padding: 12px 8px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+      border: 1.5px solid transparent; position: relative;
+    }
+    .spine .node small { display:block; font-weight: 400; font-size: 11px; margin-top: 3px; opacity: 0.85; }
+    .spine .node.lit { background: #fff; border-color: var(--accent); color: var(--accent-deep); box-shadow: 0 1px 4px rgba(193,75,39,.12); }
+    .spine .node.dim { background: transparent; border-color: var(--rule); color: #a39e92; border-style: dashed; }
+    .spine .arrow { display: flex; align-items: center; padding: 0 4px; color: var(--ink-faint); font-weight: 700; }
+    .spine .arrow.dim { color: #c7c2b6; }
+    .spine-legend { font-family: "Inter", sans-serif; font-size: 11.5px; color: var(--ink-soft); margin: 8px 2px 0; display: flex; gap: 18px; flex-wrap: wrap; }
+    .spine-legend span::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: 6px; }
+    .spine-legend span.dim::before { border-top: 2px dashed #c7c2b6; }
+
+    /* ---- PR step card ---- */
+    .pr {
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 4px 22px 20px;
+      margin: 20px 0;
+      background: #fff;
+    }
+    .pr.now { border-color: var(--accent); box-shadow: 0 1px 5px rgba(193,75,39,.10); }
+    .pr.goal { border-color: var(--teal); box-shadow: 0 1px 5px rgba(42,111,107,.10); }
+    .pr > header {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+      margin: 16px 0 4px; border-bottom: 1px solid var(--rule-soft); padding-bottom: 10px;
+    }
+    .pr .pr-title { display: flex; align-items: baseline; gap: 12px; }
+    .pr .pr-n {
+      font-family: "Inter", sans-serif; font-weight: 700; font-size: 12px;
+      color: #fff; background: var(--ink-faint);
+      padding: 3px 9px; border-radius: 999px; flex-shrink: 0; letter-spacing: 0.03em;
+    }
+    .pr.now .pr-n { background: var(--accent); }
+    .pr.goal .pr-n { background: var(--teal); }
+    .pr .pr-name { font-family: "Iowan Old Style", Georgia, serif; font-size: 21px; font-weight: 600; }
+    .pr .pr-adds {
+      font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--ink-soft);
+      text-align: right; white-space: nowrap; line-height: 1.5;
+    }
+    .pr p { font-size: 15.5px; }
+    .pr pre { margin-bottom: 0; }
+
+    /* ---- footnote ---- */
+    .foot {
+      font-size: 13px; color: var(--ink-soft); font-family: "Inter", sans-serif;
+      margin-top: 72px; padding-top: 18px; border-top: 1px solid var(--rule);
+    }
+    .foot code { font-size: 12px; }
+
+    hr { border: 0; border-top: 1px solid var(--rule); margin: 40px 0; }
+    ul, ol.body { margin: 0 0 14px; padding-left: 22px; }
+    ul li, ol.body li { margin: 5px 0; }
+    :target { scroll-margin-top: 24px; }
+
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; gap: 24px; padding: 32px 20px 80px; }
+      nav.toc { position: static; border-left: 0; padding-left: 0; max-height: none; }
+      .pr > header { flex-direction: column; }
+      .pr .pr-adds { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <nav class="toc">
+    <h4>The plan</h4>
+    <ol>
+      <li><a href="#idea">The idea</a></li>
+      <li><a href="#goal">The goal</a></li>
+      <li><a href="#shape">The shape of one call</a></li>
+      <li><a href="#plan">The delivery plan</a></li>
+    </ol>
+    <div class="grouplabel">Pull requests</div>
+    <ol start="5">
+      <li><a href="#pr1">Read a contract <span class="chip accent" style="font-size:9.5px;padding:0 6px">now</span></a></li>
+      <li><a href="#pr2">Typed arguments &amp; results</a></li>
+      <li><a href="#pr3">Signing &amp; submission</a></li>
+      <li><a href="#pr4">The token surface <span class="chip teal" style="font-size:9.5px;padding:0 6px">goal</span></a></li>
+      <li><a href="#pr5">Multi-party signing</a></li>
+      <li><a href="#pr6">Receiving events</a></li>
+      <li><a href="#pr7">Codegen</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- =================================================== -->
+    <section id="top">
+      <div class="eyebrow">go-stellar-sdk · contract-layer plan</div>
+      <h1>A high-level contract layer for the Go SDK.</h1>
+      <p class="deck">
+        The JS SDK already turns a Soroban contract call into a handful of lines. Go does not — moving
+        value still means 30–50 lines of hand-rolled host-function plumbing. The plan is to close that
+        gap by porting the JS SDK's high-level <strong>abstractions</strong> into idiomatic Go.
+        This page is the map: where we are headed, and what each PR delivers along the way.
+      </p>
+
+      <dl class="meta">
+        <div class="meta-pair"><dt>Approach</dt><dd>Port the JS SDK <code>contract</code> abstractions, idiomatically &amp; additively</dd></div>
+        <div class="meta-pair"><dt>Goal</dt><dd>A token send in ~5 lines, on parity with JS</dd></div>
+      </dl>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="idea">
+      <h2><span class="num">01</span>The idea: port the abstractions without reinventing them</h2>
+
+      <p>
+        Through the Go SDK, a transfer currently takes a few steps:
+        building a raw <code>xdr.HostFunction</code>, simulating, reading back the footprint and
+        resource fee, re-simulating (optional), signing each auth entry, submitting through <code>rpcclient</code>, then
+        polling. The same transfer is about five lines in
+        <a href="https://github.com/stellar/js-stellar-sdk"><code>@stellar/stellar-sdk</code></a>
+        (the JS SDK), which wraps those steps in a high-level layer Go doesn't offer yet.
+      </p>
+
+      <p>
+        The JS SDK achieves it with a small set
+        of high-level <strong>abstractions</strong> that sit on top of the raw XDR/RPC surface and hide
+        the state machine. They live in its <code>contract</code> module. We are
+        porting those same abstractions to Go — idiomatically (contexts, functional options,
+        <code>errors.Is/As</code>, channels over callbacks), and strictly additively, so nothing existing
+        changes.
+      </p>
+
+      <h3>The four abstractions we are porting</h3>
+      <div class="stack">
+        <div class="row">
+          <span class="tag">A</span>
+          <span class="what">contract.Client</span>
+          <span class="note">Generic invoke against <em>any</em> Soroban contract. The kernel everything else delegates to.</span>
+        </div>
+        <div class="row">
+          <span class="tag">B</span>
+          <span class="what">AssembledTransaction</span>
+          <span class="note">The <code>build → simulate → sign → send → poll</code> lifecycle, made an explicit, <code>ctx</code>-driven object instead of a hidden sequence.</span>
+        </div>
+        <div class="row">
+          <span class="tag">C</span>
+          <span class="what">SentTransaction</span>
+          <span class="note">A submitted transaction you can <code>Wait()</code> on or <code>Watch()</code> as a channel of status updates.</span>
+        </div>
+        <div class="row">
+          <span class="tag">D</span>
+          <span class="what">Spec (optional)</span>
+          <span class="note">XDR ⟷ native-Go marshaling, ported from the JS <code>spec.ts</code> allowing callers to pass Go values, not <code>ScVal</code>s.</span>
+        </div>
+        <div class="row foundation">
+          <span class="tag">+ on top</span>
+          <span class="what">Token</span>
+          <span class="note">A SEP-41 surface built on <code>contract.Client</code> — the ergonomic token API the goal below uses.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="goal">
+      <h2><span class="num">02</span>The goal: a token send in five lines</h2>
+
+      <p>
+        Here is where we are headed. One surface, the same five lines whether you are sending native XLM,
+        a credit asset, or an SAC — it auto-routes classic vs. Soroban underneath so
+        application code never has to ask "is this a <code>G…</code> or a <code>C…</code>?"
+      </p>
+
+      <pre><code><span class="c">// The headline. Same five lines for XLM, USDC, or a pure SAC.</span>
+tok, _  := asset.<span class="fn">New</span>(xdr.<span class="fn">MustNewNativeAsset</span>(),
+    asset.<span class="fn">WithRPC</span>(rpc), asset.<span class="fn">WithNetwork</span>(network.TestNetworkPassphrase),
+    asset.<span class="fn">WithSource</span>(kp.<span class="fn">Address</span>()), asset.<span class="fn">WithSigner</span>(contract.<span class="fn">KeypairSigner</span>(kp)))
+
+at, _   := tok.<span class="fn">Transfer</span>(ctx, kp.<span class="fn">Address</span>(), recipient, big.<span class="fn">NewInt</span>(<span class="n">10_000_000</span>))
+sent, _ := at.<span class="fn">SignAndSend</span>(ctx, contract.<span class="fn">KeypairSigner</span>(kp))
+_, _     = sent.<span class="fn">Wait</span>(ctx)</code></pre>
+
+      <p>
+        That is the destination. We don't ship it on day one — we ship the kernel it rests on first, then
+        thicken the lifecycle until this code is real. The next section shows the lifecycle those five
+        lines drive; the section after that breaks the road into PRs.
+      </p>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="shape">
+      <h2><span class="num">03</span>The shape of one call</h2>
+
+      <p>
+        Every contract call walks the same lifecycle. <code>AssembledTransaction</code> makes it an
+        explicit object so each stage is something you can hold, inspect, and hand off. The first PR
+        lights up the left half — <strong>build → simulate → read</strong> — and stops before signing.
+        Every PR after it thickens the dimmed half until the full path is real.
+      </p>
+
+      <div class="spine">
+        <div class="track">
+          <div class="node lit">build<small>txnbuild.Transaction</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">simulate<small>attach footprint &middot; fee &middot; auth</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">read?<small>IsReadCall()</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">Result()<small>raw ScVal out</small></div>
+        </div>
+        <div class="track" style="margin-top:14px; min-width:640px;">
+          <div class="node dim" style="flex:0 0 auto; visibility:hidden;">build</div>
+          <div class="arrow dim" style="visibility:hidden;">&rarr;</div>
+          <div class="node dim">sign auth + envelope<small>Signer</small></div>
+          <div class="arrow dim">&rarr;</div>
+          <div class="node dim">send<small>MaxFee enforced</small></div>
+          <div class="arrow dim">&rarr;</div>
+          <div class="node dim">Wait / Watch<small>poll to finality</small></div>
+        </div>
+        <div class="spine-legend">
+          <span>shipping in the first PR — the read path</span>
+          <span class="dim">the PRs that follow — sign &middot; submit &middot; poll</span>
+        </div>
+      </div>
+
+      <p>
+        Reading is the thinnest end-to-end path that still proves the whole pipeline composes:
+        <code>xdr</code> &rarr; <code>Client</code> &rarr; <code>AssembledTransaction</code> &rarr;
+        <code>Simulate</code> &rarr; decode. It needs no signer and submits nothing — so it is small,
+        self-evidently correct, and every later PR lands <em>on top of it.</em>
+      </p>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="plan">
+      <h2><span class="num">04</span>The delivery plan, PR by PR</h2>
+
+      <p>
+        Seven pull requests. The first three are the critical path to the goal and merge in order; the
+        rest fan out once the write path exists. Each ships a capability a developer can exercise, with
+        its own end-to-end test — no PR is pure scaffolding.
+      </p>
+
+      <table>
+        <thead><tr><th style="width:30px">#</th><th>Delivers</th><th>New abstractions / surface</th><th style="width:74px">Status</th></tr></thead>
+        <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td>Read a contract (typed-free, raw ScVal)</td>
+          <td><code>contract.Client</code> · <code>AssembledTransaction</code> · <code>Simulate</code> · <code>Result</code> · <code>xdr.Scv*</code> builders</td>
+          <td><span class="chip accent">review</span></td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td>Native Go arguments &amp; results</td>
+          <td><code>Spec</code> + marshaling · method-name validation</td>
+          <td><span class="chip">next</span></td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td>Signing, submission &amp; auto-restore</td>
+          <td><code>Signer</code> · <code>SignAndSend</code> · <code>SentTransaction</code> · <code>Wait/Watch</code></td>
+          <td><span class="chip">later</span></td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td><strong>The token send — the goal</strong></td>
+          <td><code>Token</code> · bundled SAC spec · SEP-41 · classic↔SAC routing</td>
+          <td><span class="chip teal">goal</span></td>
+        </tr>
+        <tr>
+          <td><strong>5</strong></td>
+          <td>Multi-party / cross-host signing</td>
+          <td><code>NeedsNonInvokerSigningBy</code> · <code>SignAuthEntries</code> · <code>ToXDR/FromXDR</code></td>
+          <td><span class="chip">later</span></td>
+        </tr>
+        <tr>
+          <td><strong>6</strong></td>
+          <td>Receiving: typed event streaming</td>
+          <td><code>contract/events</code> — decoders + <code>Stream</code></td>
+          <td><span class="chip">later</span></td>
+        </tr>
+        <tr>
+          <td><strong>7</strong></td>
+          <td>Per-contract typed clients (optional)</td>
+          <td><code>cmd/sorobangen</code> codegen</td>
+          <td><span class="chip">optional</span></td>
+        </tr>
+        </tbody>
+      </table>
+
+      <p style="color:var(--ink-faint); font-size:14px;">
+        Each PR below carries a <em>target</em> code snippet — the shape we are building toward. PR 1's is
+        real and staged today; the rest illustrate the API each PR lands.
+      </p>
+
+      <!-- PR 1 -->
+      <div class="pr now" id="pr1">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 1</span><span class="pr-name">Read a contract</span></div>
+          <div class="pr-adds">shipping now · in review<br>10 files · +2,144 · additive</div>
+        </header>
+        <p>
+          The foundation everything else lands on. <code>contract.Client</code> and <code>AssembledTransaction</code> exist;
+          <code>Invoke</code> runs <code>build → simulate</code> and hands back the assembled transaction.
+          For a view method, <code>IsReadCall()</code> is true and <code>Result()</code> returns the
+          simulated value — <em>nothing is signed and nothing is submitted</em>. Arguments go in as
+          pre-built <code>[]xdr.ScVal</code> (eased by the new <code>xdr.Scv*</code> builders), and the
+          result comes back as a raw <code>xdr.ScVal</code>. No signer, no <code>Spec</code> yet — those
+          are the next two PRs, and they bolt on without moving a wall.
+        </p>
+        <pre><code><span class="c">// Build a client — no network touched yet.</span>
+c, _ := contract.<span class="fn">New</span>(contractID, rpc, network.TestNetworkPassphrase,
+    contract.<span class="fn">WithSource</span>(account.<span class="fn">Address</span>()))
+
+<span class="c">// Invoke a view method: build the host fn, then simulate it.</span>
+at, _ := c.<span class="fn">Invoke</span>(ctx, <span class="s">"balance"</span>, []xdr.ScVal{holder})
+
+<span class="k">if</span> at.<span class="fn">IsReadCall</span>() {    <span class="c">// no address-credentialed auth, no read-write footprint</span>
+    res, _ := at.<span class="fn">Result</span>()       <span class="c">// raw xdr.ScVal — PR 2 will type-decode this</span>
+    scv := res.(xdr.ScVal)
+}</code></pre>
+      </div>
+
+      <!-- PR 2 -->
+      <div class="pr" id="pr2">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 2</span><span class="pr-name">Typed arguments &amp; results</span></div>
+          <div class="pr-adds">+ Spec, marshaling,<br>method validation</div>
+        </header>
+        <p>
+          Layer the <code>Spec</code> abstraction on top. The same <code>Invoke</code> now accepts native
+          Go values as a <code>map[string]any</code> (today it only takes raw <code>ScVal</code>s and
+          rejects maps), marshals them against the contract's spec, and decodes the return value to a
+          native Go type. Method names are validated against the spec, with a "did you mean…?" suggester.
+          No raw <code>xdr.ScVal</code> in sight.
+        </p>
+        <pre><code><span class="c">// Same Invoke signature — now hand it native Go values.</span>
+at, _ := c.<span class="fn">Invoke</span>(ctx, <span class="s">"balance"</span>, map[<span class="k">string</span>]<span class="k">any</span>{<span class="s">"id"</span>: holder})
+
+bal, _ := at.<span class="fn">Result</span>()   <span class="c">// *big.Int — decoded via Spec, not a raw ScVal</span></code></pre>
+      </div>
+
+      <!-- PR 3 -->
+      <div class="pr" id="pr3">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 3</span><span class="pr-name">Signing &amp; submission</span></div>
+          <div class="pr-adds">+ Signer, SignAndSend,<br>SentTransaction, restore</div>
+        </header>
+        <p>
+          Thicken the lifecycle past simulate. The <code>Signer</code> interface,
+          <code>SignAndSend</code>, and <code>SentTransaction</code> with
+          <code>Wait()</code> / <code>Watch()</code> complete the write path. The fee ceiling
+          (<code>MaxFee</code>) is enforced before the wire; archived state is auto-restored and
+          re-simulated transparently. This PR also folds in the lifecycle's most error-prone details —
+          the sequence-number handling around simulate and restore — so callers never hit
+          <code>txBadSeq</code>.
+        </p>
+        <pre><code><span class="c">// One call: build → simulate → sign → send → poll.</span>
+val, hash, _ := contract.<span class="fn">InvokeAndConfirm</span>(ctx, c, <span class="s">"increment"</span>,
+    map[<span class="k">string</span>]<span class="k">any</span>{}, contract.<span class="fn">KeypairSigner</span>(kp))
+
+<span class="c">// …or drive the lifecycle yourself, stage by stage:</span>
+at, _   := c.<span class="fn">Invoke</span>(ctx, <span class="s">"increment"</span>, <span class="k">nil</span>)
+sent, _ := at.<span class="fn">SignAndSend</span>(ctx, contract.<span class="fn">KeypairSigner</span>(kp))
+res, _  := sent.<span class="fn">Wait</span>(ctx)</code></pre>
+      </div>
+
+      <!-- PR 4 -->
+      <div class="pr goal" id="pr4">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 4</span><span class="pr-name">The token surface</span></div>
+          <div class="pr-adds">the goal &middot; JS parity<br>+ Token, SEP-41</div>
+        </header>
+        <p>
+          The marquee. <code>Token</code> is a hand-written, canonical SEP-41 surface built on
+          <code>contract.Client</code> using a bundled SAC spec — no codegen involved. <code>Transfer</code>
+          auto-dispatches: a classic <code>txnbuild.Payment</code> when both parties are accounts and the
+          asset is classic, a Soroban invocation whenever a contract address is involved. This is the PR
+          that closes the JS-parity gap — the five-line send from the goal becomes real, live on testnet.
+        </p>
+        <pre><code><span class="c">// Same five lines for XLM, USDC, or a pure SAC.</span>
+tok, _  := asset.<span class="fn">New</span>(xdr.<span class="fn">MustNewNativeAsset</span>(),
+    asset.<span class="fn">WithRPC</span>(rpc), asset.<span class="fn">WithNetwork</span>(network.TestNetworkPassphrase),
+    asset.<span class="fn">WithSource</span>(kp.<span class="fn">Address</span>()), asset.<span class="fn">WithSigner</span>(contract.<span class="fn">KeypairSigner</span>(kp)))
+
+at, _   := tok.<span class="fn">Transfer</span>(ctx, kp.<span class="fn">Address</span>(), recipient, big.<span class="fn">NewInt</span>(<span class="n">10_000_000</span>))
+sent, _ := at.<span class="fn">SignAndSend</span>(ctx, contract.<span class="fn">KeypairSigner</span>(kp))
+_, _     = sent.<span class="fn">Wait</span>(ctx)</code></pre>
+      </div>
+
+      <!-- PR 5 -->
+      <div class="pr" id="pr5">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 5</span><span class="pr-name">Multi-party signing</span></div>
+          <div class="pr-adds">+ auth hand-off<br>ToXDR / FromXDR</div>
+        </header>
+        <p>
+          Some contracts require signatures from someone other than the transaction's source. This PR adds
+          cross-host coordination: <code>NeedsNonInvokerSigningBy()</code> reports who still owes a
+          signature, and <code>ToXDR</code> / <code>FromXDR</code> carry the in-flight transaction and its
+          simulation between processes so a co-signer can sign just the auth entries and hand it back.
+        </p>
+        <pre><code><span class="c">// Coordinator simulates, sees a co-signer is owed, ships the tx out.</span>
+at, _   := c.<span class="fn">Invoke</span>(ctx, <span class="s">"transfer"</span>, args)
+owed    := at.<span class="fn">NeedsNonInvokerSigningBy</span>()   <span class="c">// [G...cosigner]</span>
+blob, _ := at.<span class="fn">ToXDR</span>()                       <span class="c">// hand off to the other host</span>
+
+<span class="c">// Co-signer's host: rebuild, sign only the auth entries, return it.</span>
+at2, _ := contract.<span class="fn">FromXDR</span>(ctx, blob, rpc, net)
+at2.<span class="fn">SignAuthEntries</span>(ctx, cosigner)</code></pre>
+      </div>
+
+      <!-- PR 6 -->
+      <div class="pr" id="pr6">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 6</span><span class="pr-name">Receiving events</span></div>
+          <div class="pr-adds">+ contract/events<br>decoders + Stream</div>
+        </header>
+        <p>
+          The receive side. A <code>contract/events</code> package decodes SEP-41 and SAC events into typed
+          Go values, validates SAC event integrity (to reject impostor contracts), and streams them off
+          RPC. It depends only on the XDR decode primitives, so it can land any time after PR 1 —
+          independent of the send lifecycle.
+        </p>
+        <pre><code><span class="c">// Decode and stream typed SEP-41 / SAC events off RPC.</span>
+<span class="k">for</span> ev := <span class="k">range</span> events.<span class="fn">Stream</span>(ctx, rpc, contractID) {
+    <span class="k">if</span> t, ok := ev.(events.Transfer); ok {
+        fmt.<span class="fn">Println</span>(t.From, <span class="s">"→"</span>, t.To, t.Amount)
+    }
+}</code></pre>
+      </div>
+
+      <!-- PR 7 -->
+      <div class="pr" id="pr7">
+        <header>
+          <div class="pr-title"><span class="pr-n">PR 7</span><span class="pr-name">Codegen <span style="font-weight:400;font-size:14px;color:var(--ink-faint)">· optional</span></span></div>
+          <div class="pr-adds">+ cmd/sorobangen<br>typed bindings</div>
+        </header>
+        <p>
+          For arbitrary contracts (not just tokens), a code generator emits a per-contract typed Go client
+          from a WASM or spec — typed methods, UDT structs, typed errors, and an <code>init()</code> that
+          registers the spec and event decoders. Each generated client embeds a <code>*contract.Client</code>
+          and forwards to <code>Invoke</code>. It is on nobody's critical path; token users never touch it.
+        </p>
+        <pre><code><span class="c"># Generate a typed client from a contract's WASM:</span>
+stellar contract bindings go --wasm token.wasm --out ./gen/token</code></pre>
+        <pre><code><span class="k">import</span> _ <span class="s">"myapp/gen/token"</span>   <span class="c">// init() registers spec + event decoders</span>
+
+client, _ := token.<span class="fn">NewClient</span>(contractID, rpc, net, token.<span class="fn">WithSource</span>(kp.<span class="fn">Address</span>()))
+bal, _    := client.<span class="fn">Balance</span>(ctx, holder)   <span class="c">// typed method, typed return — no ScVals</span></code></pre>
+      </div>
+    </section>
+
+    <div class="foot">
+      <p>
+        Reference implementation of all seven PRs already exists on a fork and runs end-to-end on testnet
+        (native + SAC transfers, multi-party signing, event streaming, codegen), so these milestones are
+        de-risked rather than speculative. Full design rationale lives in the RFC
+        <em>"A high-level Soroban contract layer for the Go SDK"</em>; a detailed walkthrough of PR 1 lives
+        in <em>"Reading a contract, end to end."</em> Each PR is purely additive — zero renames, zero
+        removals in <code>xdr</code> / <code>txnbuild</code> / <code>rpcclient</code> / <code>keypair</code>.
+      </p>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
