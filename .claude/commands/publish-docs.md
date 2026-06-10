@@ -19,7 +19,7 @@ Loop autonomously — commit, push, watch CI, verify online, fix, repeat — unt
 # Steps
 
 1. **Commit & push everything.**
-   `git add -A`, commit with a descriptive message, `git push origin main`.
+   Run `./scripts/generate-readme.sh` to refresh the README docs index, then `git add -A`, commit with a descriptive message, `git push origin main`.
    If push is rejected, run `git pull --rebase origin main` and retry; if it's rejected for permissions/protection, stop and report — that needs the human.
 
 2. **Watch the deploy.**
