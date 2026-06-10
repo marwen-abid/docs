@@ -286,10 +286,10 @@
 
       <div class="grid2" style="margin-top:18px">
         <div class="card">
-          <h5>① Ingest &amp; store (retention window)</h5>
+          <h5>① Ingest &amp; store (retention window — today’s plane)</h5>
           <p>A background service pulls each newly-closed ledger from Captive Core and writes it — ledger blob,
           transaction index, events — into local SQLite, one DB transaction per ledger, trimmed to a retention
-          window on every commit. This is the daemon’s working memory.</p>
+          window on every commit. This is the daemon’s working memory <b>today</b> — in the end-state architecture, ingestion moves to the full-history engine (④) and this SQLite plane has no role.</p>
         </div>
         <div class="card">
           <h5>② Serve queries</h5>
@@ -310,7 +310,8 @@
           <span class="path">internal/packfile/</span> + <span class="path">internal/events/</span> designed to
           hold and query the <em>complete</em> chain: RocksDB for the live “hot” chunk, immutable
           packfiles + bitmap/MPHF indexes for everything older. Built bottom-up as libraries; the daemon
-          doesn’t call any of it yet.</p>
+          doesn’t call any of it yet. The end goal: ingestion writes to RocksDB hot stores and freezes into
+          packfile cold segments — <b>no SQLite anywhere in the target design</b>.</p>
         </div>
       </div>
 
@@ -432,6 +433,17 @@
       <p class="muted" style="font-size:14px">Verify the table against the source before relying on it — this branch
       moves fast. <code>grep -r "fullhistory\|packfile\|internal/events" cmd/stellar-rpc/internal/daemon cmd/stellar-rpc/internal/methods</code>
       is the quickest truth check.</p>
+
+      <div class="warntip">
+        <b>Transition note — where SQLite fits.</b> Pipeline A (SQLite) is the <em>current</em> plane, inherited from
+        V1; pipeline C is the destination, and it contains no SQLite at all. The full-history design docs are
+        unambiguous about the end state: streaming ingestion “writes to RocksDB active stores … transitions to
+        immutable storage at index boundaries” and backfill writes immutable packfiles directly
+        (<span class="path">full-history/design-docs/README.md</span>); queries are served from chunk storage with
+        RocksDB as the embedded coordination DB. Expect the SQLite plane to be retired once the full-history engine
+        is wired in. (The retirement itself isn’t yet written down as a decision anywhere in the repo — the direction
+        comes from the design docs and team discussion.)
+      </div>
 
       <h4>The composition root</h4>
       <p>Everything that <em>is</em> wired gets wired in one place: <span class="ty">daemon.MustNew()</span> in
@@ -669,6 +681,12 @@
       <div class="sub">
         <h3>Store the blob, index the rest <span class="pill go">Go</span></h3>
         <p class="one">A WAL-mode SQLite store persisting raw LedgerCloseMeta blobs plus thin index tables, written one atomic transaction per ledger by the ingest loop and trimmed to a retention window on every commit.</p>
+        <div class="warntip" style="margin:14px 0">
+          <b>Transitional subsystem.</b> This plane serves every query the daemon answers <em>today</em>, but it has no
+          place in the end-goal architecture: ingestion is headed to the full-history engine’s RocksDB hot stores +
+          packfile cold segments (§10–13). Learn this section to operate and debug the present; check with the team
+          before building anything new on it.
+        </div>
         <p>The storage philosophy: <b>store the raw LCM XDR blob once, index everything else.</b> The
         <code>transactions</code> table holds only (hash → ledger, application_order) — fee-bumps get <em>two</em> rows,
         outer + inner hash — and full transactions are re-derived by seeking into the blob at read time. The
@@ -1214,7 +1232,7 @@ STELLAR_RPC_INTEGRATION_TESTS_CAPTIVE_CORE_BIN=$(which stellar-core) \
         JSON-RPC with a Rust simulation sandbox — while underneath, this branch is assembling a chunk-oriented
         full-history engine: RocksDB hot stores with in-memory roaring-bitmap indexes that freeze into immutable
         packfiles indexed by minimal-perfect-hash functions, coordinated by durable metastore flags — built bottom-up,
-        tested, and waiting to be wired into ingestion and the query path.</em>
+        tested, and waiting to be wired into ingestion and the query path — at which point the SQLite plane is expected to retire.</em>
       </div>
 
       <footer>
