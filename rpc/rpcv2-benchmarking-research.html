@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Benchmarking Stellar RPC v2 — field research &amp; recommendations</title>
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #161b24;
+    --panel2: #1c2330;
+    --line: #2c3545;
+    --text: #d7dee8;
+    --dim: #8b97a8;
+    --hot: #ff8a3d;
+    --cold: #5aa7ff;
+    --accent: #ffd166;
+    --green: #4cd97b;
+    --red: #ff6b6b;
+    --purple: #b58cff;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", Helvetica, sans-serif;
+    padding: 48px 24px 96px;
+  }
+  .wrap { max-width: 1010px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  h1 .v2 { color: var(--accent); }
+  .sub { color: var(--dim); margin: 8px 0 28px; max-width: 800px; }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--accent); margin: 56px 0 6px;
+  }
+  h2 .n { color: var(--dim); margin-right: 8px; }
+  .lede { color: var(--dim); margin-bottom: 20px; max-width: 820px; }
+  .lede strong, .lede b { color: var(--text); font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  sup a { color: var(--cold); text-decoration: none; font: 10.5px var(--mono); }
+  code { font-family: var(--mono); font-size: 0.92em; color: var(--text); }
+
+  /* TLDR strip */
+  .tldr { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .tl { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .tl .num { font: 700 18px var(--mono); color: var(--accent); }
+  .tl p { font-size: 12.5px; color: var(--dim); margin-top: 6px; }
+  .tl p b { color: var(--text); }
+
+  /* cadence map */
+  .cad { display: flex; flex-direction: column; gap: 10px; }
+  .crow { display: grid; grid-template-columns: 200px 1fr 270px; gap: 14px; align-items: stretch; }
+  .clabel { border-radius: 10px; padding: 12px 14px; font-weight: 600; font-size: 13.5px; display:flex; flex-direction:column; justify-content:center; }
+  .clabel .freq { font: 10.5px var(--mono); opacity: .8; font-weight: 400; margin-top: 3px; }
+  .l1 { background: rgba(76,217,123,.12); border: 1px solid rgba(76,217,123,.4); color: var(--green); }
+  .l2 { background: rgba(255,209,102,.10); border: 1px solid rgba(255,209,102,.4); color: var(--accent); }
+  .l3 { background: rgba(90,167,255,.10); border: 1px solid rgba(90,167,255,.4); color: var(--cold); }
+  .cwho { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; font-size: 12.5px; color: var(--dim); }
+  .cwho b { color: var(--text); }
+  .cours { border: 1px dashed var(--line); border-radius: 10px; padding: 11px 14px; font-size: 12px; color: var(--dim); }
+  .cours b { color: var(--accent); font-family: var(--mono); font-size: 11px; }
+  .pill { display:inline-block; font: 11px var(--mono); border:1px solid var(--line); border-radius: 99px; padding: 1px 8px; margin: 2px 3px 2px 0; color: var(--text); background: var(--panel); }
+
+  /* paired comparison */
+  .paired { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; align-items: start; }
+  .machine { border: 1px dashed var(--line); border-radius: 12px; padding: 16px; position: relative; }
+  .machine .mlabel { position: absolute; top: -10px; left: 14px; background: var(--panel); padding: 0 8px; font: 11px var(--mono); color: var(--dim); }
+  .twosrv { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+  .srv { border-radius: 10px; padding: 12px; text-align: center; font-size: 13px; }
+  .srv .d { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .srvA { background: rgba(139,151,168,.1); border: 1px solid var(--line); }
+  .srvB { background: rgba(255,209,102,.08); border: 1px solid rgba(255,209,102,.45); }
+  .qstream { text-align: center; font: 12px var(--mono); color: var(--dim); margin: 12px 0 4px; }
+  .qstream .qa { color: var(--text); } .qstream .qb { color: var(--accent); }
+  .decision { font-size: 12.5px; }
+  .decision .case { display: flex; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .decision .case:last-child { border-bottom: 0; }
+  .decision .cond { font: 11.5px var(--mono); white-space: nowrap; color: var(--text); min-width: 150px; }
+  .decision .out { color: var(--dim); }
+  .ok2 { color: var(--green); } .warn2 { color: var(--accent); } .bad2 { color: var(--red); }
+
+  /* metric ladder */
+  .ladder { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; align-items: stretch; position: relative; }
+  .rung { border: 1px solid var(--line); background: var(--panel2); border-radius: 10px; padding: 13px; margin: 0 7px; }
+  .rung h4 { font-size: 13px; }
+  .rung .who { margin-top: 8px; }
+  .rung p { font-size: 11.5px; color: var(--dim); margin-top: 5px; }
+  .laxis { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--dim); margin-top: 12px; padding: 0 8px; }
+  .laxis .a { color: var(--green); } .laxis .b { color: var(--red); }
+
+  /* CPD chart */
+  .chartwrap { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .chart { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .chart h4 { font-size: 13px; margin-bottom: 4px; }
+  .chart .cap { font-size: 11.5px; color: var(--dim); margin-top: 6px; }
+  svg text { font: 10px var(--mono); fill: var(--dim); }
+
+  /* stats cards */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .stat .big { font: 700 19px var(--mono); color: var(--accent); }
+  .stat p { font-size: 12px; color: var(--dim); margin-top: 4px; }
+  .stat p b { color: var(--text); }
+
+  /* co diagram */
+  .co { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* golden state */
+  .gold { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .gcol { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .gcol h4 { font-size: 13.5px; margin-bottom: 8px; }
+  .gcol ul { list-style: none; }
+  .gcol li { font-size: 12.5px; color: var(--dim); padding: 5px 0 5px 18px; position: relative; }
+  .gcol li::before { content: "•"; position: absolute; left: 4px; }
+  .gcol li b { color: var(--text); }
+  .gcol.v2c { border-color: rgba(90,167,255,.45); }
+
+  /* recommendations */
+  .recs { display: flex; flex-direction: column; gap: 12px; }
+  .rec { display: grid; grid-template-columns: 44px 1fr 200px; gap: 14px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; align-items: start; }
+  .rec .rn { font: 700 19px var(--mono); color: var(--accent); text-align: center; padding-top: 2px; }
+  .rec .rt { font-weight: 600; font-size: 14px; }
+  .rec .rd { font-size: 12.5px; color: var(--dim); margin-top: 4px; }
+  .rec .rd b { color: var(--text); }
+  .rec .rw { font: 11px var(--mono); color: var(--dim); text-align: right; }
+  .rec .rw .iss { color: var(--accent); display: block; margin-bottom: 3px; }
+
+  .why { margin-top: 18px; font-size: 13.5px; color: var(--dim); border-left: 3px solid var(--accent); padding-left: 14px; }
+  .why b { color: var(--text); }
+
+  /* sources */
+  .srcs { font-size: 12.5px; color: var(--dim); }
+  .srcs li { margin: 6px 0; list-style: none; }
+  .srcs .sn { font: 11px var(--mono); color: var(--cold); margin-right: 6px; }
+  .srcs a { color: var(--dim); }
+  .vbadge { font: 9.5px var(--mono); padding: 1px 6px; border-radius: 99px; margin-left: 6px; }
+  .vyes { background: rgba(76,217,123,.12); color: var(--green); border: 1px solid rgba(76,217,123,.4); }
+  .vext { background: rgba(255,209,102,.10); color: var(--accent); border: 1px solid rgba(255,209,102,.35); }
+  .foot { margin-top: 40px; color: var(--dim); font-size: 12px; max-width: 860px; }
+
+  @media (max-width: 820px) {
+    .tldr, .stats, .ladder { grid-template-columns: 1fr 1fr; }
+    .crow, .paired, .chartwrap, .co, .gold { grid-template-columns: 1fr; }
+    .rec { grid-template-columns: 36px 1fr; } .rec .rw { grid-column: 2; text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Benchmarking <span class="v2">RPC v2</span> — what the rest of the world figured out</h1>
+  <p class="sub">Field research for the “automated, repeatable benchmarking” problem (roadmap risk #2).
+  We looked at how database vendors, compiler teams, and other chains run perf benchmarks in CI —
+  and what measurement science says about the parts we can't engineer away. Companion to
+  <em>benchmarking-problem.html</em> (the problem framing).</p>
+
+  <!-- ============ TLDR ============ -->
+  <div class="tldr">
+    <div class="tl"><div class="num">①</div><p><b>Nobody merge-gates on wall-time.</b> Per-PR runs are cheap/deterministic; full wall-time suites run nightly with retrospective stats.</p></div>
+    <div class="tl"><div class="num">②</div><p><b>Pair, don't pin.</b> ClickHouse cancels machine noise by running baseline + candidate on the <em>same box, interleaved</em> — per-PR, on shared CI.</p></div>
+    <div class="tl"><div class="num">③</div><p><b>v2's I/O budget is assertable.</b> The packfile contract is “1 I/O to open, 1 per lookup” — countable on any runner, no clock needed.</p></div>
+    <div class="tl"><div class="num">④</div><p><b>Thresholds don't work.</b> MongoDB saw up to 99% false positives; change-point detection over a nightly series is the industry answer.</p></div>
+    <div class="tl"><div class="num">⑤</div><p><b>p99 needs open-loop load.</b> Closed-loop drivers under-report tails by up to ~200× (coordinated omission) — exactly at our 500 ms SLA percentile.</p></div>
+  </div>
+
+  <!-- ============ 01 CADENCE ============ -->
+  <h2><span class="n">01</span>The cadence map: what actually runs where</h2>
+  <p class="lede">Across every team we examined, perf testing splits into <strong>three layers by cost and determinism</strong> —
+  no one runs their heavyweight wall-time suite as a blocking per-PR gate. This is the shape #775 should inherit
+  instead of inventing.</p>
+
+  <div class="panel cad">
+    <div class="crow">
+      <div class="clabel l1">PER-PR / PER-MERGE<span class="freq">minutes · blocking or auto-comment</span></div>
+      <div class="cwho">
+        <span class="pill">ClickHouse</span> ~3,000 query benches on <b>every PR</b> — viable only because of the paired same-machine design (§02)<sup><a href="#s1">[1]</a></sup>.
+        <span class="pill">rustc</span> auto-runs the full suite <b>after every merge</b> on a dedicated collector + on-demand per-PR via <code>@rust-timer queue</code><sup><a href="#s4">[4]</a></sup>.
+        <span class="pill">CodSpeed users</span> run benches <b>once</b> under CPU simulation on normal shared runners — deterministic, so a 10% default threshold works<sup><a href="#s8">[8]</a></sup>.
+      </div>
+      <div class="cours"><b>RPC v2 ⇒</b> per-PR gate = deterministic proxy checks (§03) + paired quick query benches (§02). Small, always-on, trustworthy.</div>
+    </div>
+    <div class="crow">
+      <div class="clabel l2">NIGHTLY / PERIODIC<span class="freq">hours · non-blocking · time-series</span></div>
+      <div class="cwho">
+        <span class="pill">MongoDB</span> ~200 end-to-end benchmarks <b>daily</b> on real EC2 clusters; per-patch runs are opt-in, never a merge gate<sup><a href="#s9">[9]</a></sup>.
+        <span class="pill">DataStax</span> nightly runs → Graphite → <b>Hunter</b> change-point detection → Slack<sup><a href="#s11">[11]</a></sup>.
+        <span class="pill">Bitcoin Core</span> continuous IBD + microbench runs on dedicated idle hardware (bitcoinperf → codespeed/Grafana)<sup><a href="#s6">[6]</a></sup>.
+      </div>
+      <div class="cours"><b>RPC v2 ⇒</b> #775's real home: nightly full ingest+query suite on the pinned box, golden data, results appended to the CSV/GCS series, CPD on top (§04).</div>
+    </div>
+    <div class="crow">
+      <div class="clabel l3">RELEASE / AD-HOC<span class="freq">days · manual · exploratory</span></div>
+      <div class="cwho">
+        <span class="pill">Polkadot</span> re-derives on-chain weights by benchmarking worst-case extrinsics on standardized hardware (10¹² weight ≡ 1 s on the reference box)<sup><a href="#s7">[7]</a></sup>.
+        <span class="pill">NEAR</span> re-estimates gas params in a container under QEMU instruction counting<sup><a href="#s5">[5]</a></sup>.
+        <span class="pill">Stellar (today)</span> the #750 cross-machine sweep is exactly this layer.
+      </div>
+      <div class="cours"><b>RPC v2 ⇒</b> SLA validation (#776 §4), hardware-recommendation sweeps, v1-vs-v2 comparisons. Run per release or per design milestone, not per change.</div>
+    </div>
+  </div>
+
+  <!-- ============ 02 PAIRED ============ -->
+  <h2><span class="n">02</span>Trick 1 — paired comparison cancels the machine (ClickHouse)</h2>
+  <p class="lede">The strongest single idea we found. ClickHouse used to compare against historical numbers and got burned
+  by environment drift (“a machine with a dying HDD”, a broken <code>atop</code> update). Now they run the <strong>reference binary and the
+  PR binary simultaneously on the same machine</strong>, alternating queries — systematic errors hit both sides equally and cancel<sup><a href="#s1">[1]</a></sup>.
+  That's what makes per-PR perf testing possible <em>without</em> quiet dedicated hardware.</p>
+
+  <div class="panel">
+    <div class="paired">
+      <div>
+        <div class="machine"><span class="mlabel">one machine — any machine</span>
+          <div class="twosrv">
+            <div class="srv srvA">daemon @ baseline<div class="d">main / last release</div></div>
+            <div class="srv srvB">daemon @ candidate<div class="d">the PR build</div></div>
+          </div>
+          <div class="qstream">query stream:&nbsp; <span class="qa">A</span> <span class="qb">B</span> <span class="qa">A</span> <span class="qb">B</span> <span class="qa">A</span> <span class="qb">B</span> … <span style="opacity:.7">(same golden chunks on disk)</span></div>
+        </div>
+        <p class="cap" style="font-size:12px;color:var(--dim);margin-top:10px">Disk spikes, noisy neighbors, thermal drift — all hit <em>both</em> distributions.
+        Compare the two samples, not either sample against history.</p>
+      </div>
+      <div class="decision">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Per query: median of N runs each side → difference <code>D</code>; a non-parametric bootstrap
+        builds the “nothing changed” distribution → per-query threshold <code>T</code><sup><a href="#s1">[1]</a></sup>:</div>
+        <div class="case"><span class="cond">|D| ≤ T</span><span class="out">not statistically significant → <span class="ok2">pass</span></span></div>
+        <div class="case"><span class="cond">|D| ≤ 5%</span><span class="out">significant but too small to matter → <span class="ok2">pass</span></span></div>
+        <div class="case"><span class="cond">T ≥ 10%</span><span class="out">the <em>test</em> is too noisy to measure anything → <span class="warn2">flag the benchmark, not the code</span></span></div>
+        <div class="case"><span class="cond">|D| ≥ T and ≥ 5%</span><span class="out">real, notable change → <span class="bad2">report with flamegraph + counter diff</span></span></div>
+      </div>
+    </div>
+    <p class="why"><b>For #771:</b> the query benches (<code>cold-*</code>/<code>hot-*</code>) read immutable chunks — two daemon
+    builds can point at the <em>same golden data</em> concurrently with zero state conflict. v2's architecture is unusually
+    friendly to this trick. ClickHouse's two cultural lessons travel too: <b>unstable benchmarks are a first-class defect</b>
+    (several hundred of their queries turned out to measure nothing), and false positives quietly turn the whole system into
+    “mining the green check”<sup><a href="#s1">[1]</a></sup>.</p>
+  </div>
+
+  <!-- ============ 03 PROXY METRICS ============ -->
+  <h2><span class="n">03</span>Trick 2 — deterministic proxy metrics for the per-PR gate</h2>
+  <p class="lede">When teams need <strong>per-change</strong> signal, they stop measuring time and start counting things
+  that don't vary: instructions, simulated cycles, I/O operations. Wall time then only needs to be measured nightly, where
+  noise can be averaged across a series.</p>
+
+  <div class="panel">
+    <div class="ladder">
+      <div class="rung">
+        <h4>I/O operations &amp; bytes</h4>
+        <div class="who"><span class="pill">NEAR io-trace</span><span class="pill">★ RPC v2</span></div>
+        <p>NEAR replays recorded I/O traces and counts DB GET/SET requests and bytes to ground gas costs<sup><a href="#s5">[5]</a></sup>. Fully deterministic.</p>
+      </div>
+      <div class="rung">
+        <h4>Instructions executed</h4>
+        <div class="who"><span class="pill">rustc</span><span class="pill">NEAR icount</span></div>
+        <p>rustc-perf's default comparison metric; significance = IQR-fence vs the test's own history<sup><a href="#s3">[3]</a></sup>. NEAR prices gas via QEMU icount because wall time is “highly variable between runs and physical machines”<sup><a href="#s5">[5]</a></sup>.</p>
+      </div>
+      <div class="rung">
+        <h4>Simulated cycles</h4>
+        <div class="who"><span class="pill">CodSpeed</span></div>
+        <p>cycles ≈ Ir + L1-miss·cost + LL-miss·cost; benchmark runs <b>once</b>, on any shared CI runner, hardware-agnostic<sup><a href="#s8">[8]</a></sup>.</p>
+      </div>
+      <div class="rung">
+        <h4>Wall time</h4>
+        <div class="who"><span class="pill">everyone, nightly</span></div>
+        <p>The only metric users feel — but it needs pinned+tuned hardware, repetition, and series-level statistics (§04, §05).</p>
+      </div>
+    </div>
+    <div class="laxis"><span class="a">← deterministic · runs anywhere · per-PR-gateable</span><span class="b">representative · needs pinned hardware · nightly →</span></div>
+
+    <p class="why"><b>The v2-specific gem:</b> the packfile library was <em>designed to an I/O budget</em> — one read to open,
+    one pread per item lookup, coalesced scatter reads (design-docs/packfile-library.md). That contract is <b>countable</b>:
+    a per-PR test can open a golden chunk and assert syscall/pread counts, RocksDB perf-context counters, and Go allocation
+    counts for canonical operations. A regression like “lookups now take 2 I/Os” or an accidental O(n) scan is caught
+    deterministically, on any GitHub runner, with no clock involved — the same move as ClickHouse recording
+    <code>perf_event</code> counters per query to <em>explain</em> time changes<sup><a href="#s1">[1]</a></sup>, but used as the gate itself.</p>
+  </div>
+
+  <!-- ============ 04 CPD ============ -->
+  <h2><span class="n">04</span>Trick 3 — regressions are change-points in a series, not threshold breaches</h2>
+  <p class="lede">MongoDB ran threshold-based detection (“flag if &gt;X% vs last run / last week / last release”) for years —
+  and measured its false-positive rate at <strong>up to 99%</strong>. Their replacement, E-Divisive change-point detection over the
+  full nightly time series, is now the published industry baseline (and DataStax's Hunter refined it)<sup><a href="#s10">[10]</a>&nbsp;<a href="#s11">[11]</a></sup>.</p>
+
+  <div class="panel">
+    <div class="chartwrap">
+      <div class="chart">
+        <h4 class="bad2">Threshold on single runs</h4>
+        <svg viewBox="0 0 320 110" width="100%">
+          <line x1="10" y1="30" x2="310" y2="30" stroke="#ff6b6b" stroke-dasharray="3 3" stroke-width="1"/>
+          <text x="14" y="26">+X% threshold</text>
+          <polyline fill="none" stroke="#8b97a8" stroke-width="1.5"
+            points="10,60 30,48 50,68 70,42 90,25 110,58 130,46 150,27 170,62 190,50 210,75 230,60 250,72 270,85 290,68 310,80"/>
+          <circle cx="90" cy="25" r="4" fill="none" stroke="#ff6b6b" stroke-width="1.5"/>
+          <circle cx="150" cy="27" r="4" fill="none" stroke="#ff6b6b" stroke-width="1.5"/>
+          <text x="60" y="14" fill="#ff6b6b">false alarms</text>
+          <text x="240" y="103" >real shift ↑ (missed)</text>
+        </svg>
+        <p class="cap">Noise crosses the line; a real-but-gradual shift never does. MongoDB: ~100 notifications per 1 real tracked issue<sup><a href="#s10">[10]</a></sup>.</p>
+      </div>
+      <div class="chart">
+        <h4 class="ok2">Change-point detection on the series</h4>
+        <svg viewBox="0 0 320 110" width="100%">
+          <polyline fill="none" stroke="#8b97a8" stroke-width="1.5"
+            points="10,60 30,48 50,68 70,42 90,55 110,58 130,46 150,52 170,62 190,50 210,88 230,75 250,87 270,95 290,80 310,90"/>
+          <line x1="200" y1="15" x2="200" y2="100" stroke="#4cd97b" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text x="206" y="22" fill="#4cd97b">level shift detected</text>
+          <line x1="10" y1="55" x2="200" y2="55" stroke="#5aa7ff" stroke-width="1" stroke-dasharray="2 4"/>
+          <line x1="200" y1="86" x2="310" y2="86" stroke="#5aa7ff" stroke-width="1" stroke-dasharray="2 4"/>
+        </svg>
+        <p class="cap">Compares the distribution before vs after every candidate point; flags the commit window where the level moved. MongoDB: 9 notifications → 4 real issues<sup><a href="#s10">[10]</a></sup>.</p>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="big">≈30 points</div><p>Hunter's default window — <b>a month of nightlies</b>. Two weeks (14) was empirically too few for stable detection<sup><a href="#s11">[11]</a></sup>.</p></div>
+      <div class="stat"><div class="big">≥5% filter</div><p>Change-points below 5% magnitude are dropped as not actionable<sup><a href="#s11">[11]</a></sup> — the same floor ClickHouse uses per-query<sup><a href="#s1">[1]</a></sup>.</p></div>
+      <div class="stat"><div class="big">~1–6 days lag</div><p>CPD is retrospective — it needs ≥3 points after a change. MongoDB flags regressions days after the commit; attribution, not gating<sup><a href="#s10">[10]</a>&nbsp;<a href="#s11">[11]</a></sup>.</p></div>
+    </div>
+
+    <p class="why"><b>For #775:</b> the per-iteration CSVs already land in
+    <code>gs://rpc-full-history/benchmarks/</code> — the missing piece is treating them as a <em>time series</em>. Run nightly on the
+    pinned box, append, and run Hunter (open-source, t-test-based, deterministic<sup><a href="#s11">[11]</a></sup>) over the series with a
+    Slack sink. Accept the lag: the per-PR layer (§02–03) catches the big/deterministic stuff; CPD catches the slow 7% drift no
+    gate ever will. Don't promise blocking detection of small wall-time regressions — nobody we found has it.</p>
+  </div>
+
+  <!-- ============ 05 NOISE ============ -->
+  <h2><span class="n">05</span>The noise floor is a property of the setup, not the statistics</h2>
+  <p class="lede">Three independent results say the same thing: <strong>fix the environment first, then add statistics</strong> — never the reverse.</p>
+
+  <div class="panel">
+    <div class="stats" style="margin-top:0">
+      <div class="stat"><div class="big">±10% → 0 FP</div><p><b>“Statistics cannot rescue bad hardware.”</b> One DataStax team on untuned datacenter boxes saw ±10% median noise and ~3 false change-points/month; the same benchmarks moved to tuned cloud instances → zero false positives<sup><a href="#s11">[11]</a></sup>.</p></div>
+      <div class="stat"><div class="big">EC2 ≈ on-prem</div><p>MongoDB empirically showed <b>tuned</b> EC2 is as repeatable as their on-prem lab, and baked that tuning into their harness defaults so every run inherits it<sup><a href="#s9">[9]</a></sup>. Validates the fixed-instance plan from #750 — pin one type <em>and document the OS tuning</em>.</p></div>
+      <div class="stat"><div class="big">33–300%</div><p>Mytkowicz et al.: UNIX env size (stack alignment) swung a benchmark 33% routinely, ~300% worst case; link order alone biased results 2–8%<sup><a href="#s12">[12]</a></sup>. ClickHouse independently sees true-positive perf changes from executable layout with no relevant code change<sup><a href="#s1">[1]</a></sup>.</p></div>
+    </div>
+    <p class="why"><b>Practically:</b> normalize env/ASLR in the harness, expect occasional layout-driven “regressions” that bisect to
+    nothing, and budget repetitions where the variance actually lives — Kalibera &amp; Jones: run a one-time <b>dimensioning experiment</b>
+    (variance across machine-provision vs process-run vs query-iteration), then hardcode repetition counts at the noisy level; report
+    <b>effect sizes with confidence intervals</b> (“+5.5% ± 2.5%”), not p-values; determine warmup once per benchmark and hardcode it —
+    automated warmup heuristics pick wrong in both directions<sup><a href="#s13">[13]</a></sup>. This is exactly the §7.0 methodology slot in #776.</p>
+  </div>
+
+  <!-- ============ 06 COORDINATED OMISSION ============ -->
+  <h2><span class="n">06</span>One landmine in the SLA itself: coordinated omission</h2>
+  <p class="lede">The p99 ≤ 500 ms target is measured with a load generator — and the default way of building one
+  silently fabricates the answer.</p>
+
+  <div class="panel">
+    <div class="co">
+      <div class="chart">
+        <h4 class="bad2">Closed loop (request → wait → next)</h4>
+        <svg viewBox="0 0 320 90" width="100%">
+          <rect x="10" y="20" width="28" height="12" rx="3" fill="#2c3545"/><rect x="44" y="20" width="28" height="12" rx="3" fill="#2c3545"/>
+          <rect x="78" y="20" width="150" height="12" rx="3" fill="#ff6b6b" opacity=".7"/>
+          <rect x="234" y="20" width="28" height="12" rx="3" fill="#2c3545"/><rect x="268" y="20" width="28" height="12" rx="3" fill="#2c3545"/>
+          <text x="80" y="50">server stalls 1.4 s → driver just… waits</text>
+          <text x="10" y="74">stall appears as ONE slow sample; the requests that *should* have</text>
+          <text x="10" y="86">been sent during it are never measured → tail vanishes</text>
+        </svg>
+      </div>
+      <div class="chart">
+        <h4 class="ok2">Open loop (constant schedule)</h4>
+        <svg viewBox="0 0 320 90" width="100%">
+          <g fill="#2c3545">
+            <rect x="10" y="20" width="16" height="12" rx="3"/><rect x="32" y="20" width="16" height="12" rx="3"/><rect x="54" y="20" width="16" height="12" rx="3"/>
+          </g>
+          <g fill="#ffd166" opacity=".85">
+            <rect x="76" y="20" width="16" height="12" rx="3"/><rect x="98" y="20" width="16" height="12" rx="3"/><rect x="120" y="20" width="16" height="12" rx="3"/><rect x="142" y="20" width="16" height="12" rx="3"/>
+          </g>
+          <g fill="#2c3545"><rect x="164" y="20" width="16" height="12" rx="3"/><rect x="186" y="20" width="16" height="12" rx="3"/></g>
+          <text x="76" y="50">requests keep arriving on schedule; queueing delay</text>
+          <text x="76" y="62">is charged to latency (measured from intended send time)</text>
+        </svg>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="big">6.04 ms</div><p>p99 reported by a standard closed-loop driver during a run containing a 1.4 s server stall<sup><a href="#s2">[2]</a></sup>.</p></div>
+      <div class="stat"><div class="big">1.27 s</div><p>The <b>actual</b> p99 of the same run, measured open-loop (wrk2) — a ~200× difference at exactly our SLA percentile<sup><a href="#s2">[2]</a></sup>.</p></div>
+      <div class="stat"><div class="big">#776 §7</div><p><b>⇒ spec it:</b> query scenarios must drive constant-rate open-loop load (wrk2-style or vegeta/HdrHistogram) with latency measured from the scheduled send time.</p></div>
+    </div>
+  </div>
+
+  <!-- ============ 07 GOLDEN STATE ============ -->
+  <h2><span class="n">07</span>Golden state: v2's immutability makes the v1 problem mostly disappear</h2>
+  <p class="lede">The v1 CI design fights hard for “identical starting DB per run” (EBS volume clones of a golden SQLite volume) because
+  SQLite is one big mutable file. v2's layout changes the economics — and Bitcoin Core has run the resulting pattern for years:
+  bitcoinperf benchmarks initial-block-download over “an interesting range of the chain” <em>on top of a preexisting synced datadir</em><sup><a href="#s6">[6]</a></sup> —
+  structurally identical to #750's “ingest chunk 5999 on top of golden chunks 5859–5998”.</p>
+
+  <div class="panel gold">
+    <div class="gcol">
+      <h4>v1 — golden state is hard</h4>
+      <ul>
+        <li>One mutable SQLite file; every run <b>dirties it</b> (tombstones, WAL growth)</li>
+        <li>⇒ full volume clone per run (EBS clones, &lt;2 min) or slow S3 restore</li>
+        <li>Representative DB = 350+ GB that must be byte-identical every time</li>
+      </ul>
+    </div>
+    <div class="gcol v2c">
+      <h4>v2 — golden state is mostly free</h4>
+      <ul>
+        <li><b>Cold chunks are immutable by design</b> — written once at freeze/backfill, never modified. Reads don't dirty them; they can live on a shared read-only volume/snapshot indefinitely</li>
+        <li>Per-run reset = <b>wipe the hot RocksDB dir + metastore</b> (one small directory), re-mount the cold set</li>
+        <li>Ingest benches write <b>new</b> chunk files — delete them after; the golden set is untouched</li>
+        <li>Synthetic datasets (#762) are reproducible from <code>(apply-load config, seed)</code> — the golden set itself can be regenerated, not just restored (NEAR containerizes its estimator for the same reason<sup><a href="#s5">[5]</a></sup>)</li>
+      </ul>
+    </div>
+  </div>
+  <p class="why" style="max-width:1010px"><b>Caveat that keeps EBS clones relevant:</b> filesystem cache state and EBS lazy-loading still matter —
+  §7.0's cold-cache eviction methodology and a warm-the-volume step remain necessary, and the <em>ingestion</em>-CI design (golden DB + disposable clone)
+  is still the right shape for any benchmark that mutates shared state. The v1 doc's analysis transfers; it just applies to a much smaller mutable surface.</p>
+
+  <!-- ============ 08 RECOMMENDATIONS ============ -->
+  <h2><span class="n">08</span>Recommendations, mapped to the open issues</h2>
+  <p class="lede">In priority order. Each one is a borrowed, working practice — none is invented here.</p>
+
+  <div class="panel recs">
+    <div class="rec">
+      <div class="rn">1</div>
+      <div><div class="rt">Split the cadence: deterministic per-PR, wall-time nightly</div>
+      <div class="rd">Shape #775 as two jobs, not one: a <b>per-PR gate</b> built from §02/§03 (paired quick benches + counted invariants, minutes, any runner) and a <b>nightly suite</b> on the pinned instance feeding a time series. Per-PR wall-time gating of the full suite is the one design nobody in the field ships.</div></div>
+      <div class="rw"><span class="iss">#775</span>MongoDB · rustc · DataStax</div>
+    </div>
+    <div class="rec">
+      <div class="rn">2</div>
+      <div><div class="rt">Add paired same-machine comparison to the query benches</div>
+      <div class="rd">Teach <code>bench-fullhistory</code> to run <b>two daemon builds against the same golden chunks, interleaved</b>, and emit (D, T) per benchmark with ClickHouse's 4-case verdict. This is the cheapest path to trustworthy per-PR perf signal — no golden hardware required.</div></div>
+      <div class="rw"><span class="iss">#771</span>ClickHouse</div>
+    </div>
+    <div class="rec">
+      <div class="rn">3</div>
+      <div><div class="rt">Assert the I/O budget as a deterministic per-PR test</div>
+      <div class="rd">The packfile/cold-reader contracts (“1 I/O open, 1 pread/lookup, coalesced scatters”) and RocksDB perf-context counters are <b>exact, countable invariants</b>. Assert counts for canonical ops (open chunk, point lookup, 1k-event scatter, ledger ingest) in ordinary CI. Catches algorithmic regressions with zero noise.</div></div>
+      <div class="rw"><span class="iss">#771 · #776</span>rustc · NEAR · CodSpeed</div>
+    </div>
+    <div class="rec">
+      <div class="rn">4</div>
+      <div><div class="rt">Run change-point detection over the nightly series — start accumulating now</div>
+      <div class="rd">Append nightly results to the existing GCS CSV store and run <b>Hunter</b> (or E-Divisive) with a 5% magnitude filter and Slack output. It needs <b>~30 points</b> to be trustworthy — every week not collecting is a week of delay on #775's value.</div></div>
+      <div class="rw"><span class="iss">#775</span>MongoDB · Hunter</div>
+    </div>
+    <div class="rec">
+      <div class="rn">5</div>
+      <div><div class="rt">Write the §7.0 methodology to kill known measurement bugs</div>
+      <div class="rd"><b>Open-loop constant-rate load</b> + HdrHistogram for every latency scenario (coordinated omission); effect-size CIs not p-values; one-time dimensioning experiment to place repetitions; fixed, hand-determined warmup counts; env/ASLR normalization.</div></div>
+      <div class="rw"><span class="iss">#776</span>wrk2 · Kalibera&amp;Jones · Mytkowicz</div>
+    </div>
+    <div class="rec">
+      <div class="rn">6</div>
+      <div><div class="rt">Exploit immutability for golden state; keep clones only for the mutable surface</div>
+      <div class="rd">Golden cold chunks: one read-only volume/snapshot, shared across runs. Per-run reset: wipe hot RocksDB + metastore, delete bench-written chunks. Keep the v1 EBS-clone pattern for ingestion benches that mutate shared state, plus an explicit cache-eviction/volume-warm step.</div></div>
+      <div class="rw"><span class="iss">#762 · v1 doc</span>bitcoinperf · design docs</div>
+    </div>
+    <div class="rec">
+      <div class="rn">7</div>
+      <div><div class="rt">Pin one tuned instance type; treat benchmark instability as a defect</div>
+      <div class="rd">One instance type from the #750 sweep, with documented OS/EBS tuning (MongoDB-style defaults in the harness). Track the false-positive rate of the benchmark system itself, and auto-flag benchmarks whose own variance exceeds ~10% as broken tests (ClickHouse's “unstable query” class) — trust is the product.</div></div>
+      <div class="rw"><span class="iss">#750 · #775</span>MongoDB · DataStax · ClickHouse</div>
+    </div>
+  </div>
+
+  <!-- ============ SOURCES ============ -->
+  <h2><span class="n">09</span>Sources</h2>
+  <div class="panel srcs">
+    <li id="s1"><span class="sn">[1]</span><a href="https://clickhouse.com/blog/testing-the-performance-of-click-house">ClickHouse — “Testing the Performance of ClickHouse” (2021)</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s2"><span class="sn">[2]</span><a href="https://github.com/giltene/wrk2">wrk2 README — constant-throughput load &amp; coordinated omission (Tene)</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s3"><span class="sn">[3]</span><a href="https://github.com/rust-lang/rustc-perf/blob/master/docs/comparison-analysis.md">rustc-perf — comparison analysis (IQR significance, magnitude/relevance)</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s4"><span class="sn">[4]</span><a href="https://rustc-dev-guide.rust-lang.org/tests/perf.html">rustc-dev-guide — performance testing (auto per-merge runs, @rust-timer)</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s5"><span class="sn">[5]</span><a href="https://github.com/near/nearcore/tree/master/runtime/runtime-params-estimator">NEAR runtime-params-estimator — QEMU icount, containerized runs, IO-trace replay</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s6"><span class="sn">[6]</span><a href="https://github.com/chaincodelabs/bitcoinperf">bitcoinperf (Chaincode Labs) — Bitcoin Core IBD/microbench monitoring</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s7"><span class="sn">[7]</span><a href="https://github.com/paritytech/polkadot-sdk/tree/master/substrate/frame/benchmarking">Substrate FRAME benchmarking — worst-case weights on benchmark hardware</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s8"><span class="sn">[8]</span><a href="https://codspeed.io/docs/instruments/cpu/">CodSpeed docs — CPU-simulation instrument, impact metrics &amp; thresholds</a><span class="vbadge vyes">verified against source</span></li>
+    <li id="s9"><span class="sn">[9]</span><a href="https://arxiv.org/abs/2004.08425">Ingo &amp; Daly — “Automated system performance testing at MongoDB” (DBTest ’20)</a><span class="vbadge vext">extracted; consistent with paper</span></li>
+    <li id="s10"><span class="sn">[10]</span><a href="https://arxiv.org/abs/2003.00584">Daly et al. — “The Use of Change Point Detection to Identify Software Performance Regressions” (ICPE ’20)</a><span class="vbadge vext">extracted; consistent with paper</span></li>
+    <li id="s11"><span class="sn">[11]</span><a href="https://arxiv.org/abs/2301.03034">Fleming et al. — “Hunter: Using Change Point Detection to Hunt for Performance Regressions” (DataStax)</a><span class="vbadge vext">extracted; consistent with paper</span></li>
+    <li id="s12"><span class="sn">[12]</span><a href="https://dl.acm.org/doi/10.1145/1508284.1508275">Mytkowicz et al. — “Producing Wrong Data Without Doing Anything Obviously Wrong!” (ASPLOS ’09)</a><span class="vbadge vext">extracted; consistent with paper</span></li>
+    <li id="s13"><span class="sn">[13]</span><a href="https://kar.kent.ac.uk/33611/45/p63-kaliber.pdf">Kalibera &amp; Jones — “Rigorous Benchmarking in Reasonable Time”</a><span class="vbadge vext">extracted; consistent with paper</span></li>
+  </div>
+
+  <p class="foot">Method: multi-angle web research (5 parallel search angles → claim extraction from primary sources), then manual
+  verification — sources marked <span class="vbadge vyes" style="position:relative;top:-1px">verified against source</span> were re-fetched and
+  checked claim-by-claim on 2026-06-11; paper-based claims marked <span class="vbadge vext" style="position:relative;top:-1px">extracted</span> come from the
+  cited primary papers but were not independently re-verified (the adversarial-verification pass was cut short by an API budget limit).
+  Design grounding: RPC V2 Field Guide (onboarding), design-docs/packfile-library.md &amp; getevents-full-history-design.md,
+  stellar-rpc issues #750 #762 #771 #775 #776 #777, and the “RPC Perf Evaluation — Ingestion CI Test” v1 design doc.
+  Companion: <code>benchmarking-problem.html</code> (problem framing).</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Benchmarking Stellar RPC v2 — the problem</title>
+<style>
+  :root {
+    --bg: #0e1117;
+    --panel: #161b24;
+    --panel2: #1c2330;
+    --line: #2c3545;
+    --text: #d7dee8;
+    --dim: #8b97a8;
+    --hot: #ff8a3d;
+    --cold: #5aa7ff;
+    --accent: #ffd166;
+    --green: #4cd97b;
+    --red: #ff6b6b;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", Helvetica, sans-serif;
+    padding: 48px 24px 96px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  h1 .v2 { color: var(--accent); }
+  .sub { color: var(--dim); margin: 8px 0 40px; max-width: 760px; }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--accent); margin: 56px 0 6px;
+  }
+  h2 .n { color: var(--dim); margin-right: 8px; }
+  .lede { color: var(--dim); margin-bottom: 20px; max-width: 780px; }
+  .lede strong { color: var(--text); font-weight: 600; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 24px;
+  }
+
+  /* ---- Diagram 1: system under test ---- */
+  .sut { display: grid; grid-template-columns: 1fr 1.6fr; gap: 20px; }
+  .tier { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  .tier h3 { font-size: 14px; margin-bottom: 4px; }
+  .tier .tag { font: 11px var(--mono); padding: 2px 7px; border-radius: 99px; display: inline-block; margin-bottom: 8px; }
+  .v1tag { background: #2a2f3a; color: var(--dim); }
+  .hotT { background: rgba(255,138,61,.15); color: var(--hot); border: 1px solid rgba(255,138,61,.4); }
+  .coldT { background: rgba(90,167,255,.15); color: var(--cold); border: 1px solid rgba(90,167,255,.4); }
+  .tier p { font-size: 13px; color: var(--dim); }
+  .tier p b { color: var(--text); }
+  .flowrow { display: flex; align-items: stretch; gap: 0; margin-top: 16px; }
+  .node {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; flex: 1; text-align: center;
+  }
+  .node .t { font-weight: 600; font-size: 13.5px; }
+  .node .d { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+  .node.hot { border-color: rgba(255,138,61,.5); }
+  .node.cold { border-color: rgba(90,167,255,.5); }
+  .arr { display: flex; align-items: center; padding: 0 8px; color: var(--dim); font-size: 18px; }
+  .arr.lab { flex-direction: column; justify-content: center; }
+  .arr .al { font: 10px var(--mono); color: var(--dim); }
+  .measure {
+    margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .chip { font: 12px var(--mono); border: 1px dashed var(--line); color: var(--dim); border-radius: 8px; padding: 5px 10px; }
+  .chip b { color: var(--accent); font-weight: 600; }
+
+  /* ---- Diagram 2: the equation ---- */
+  .eq { text-align: center; font: 600 20px var(--mono); margin: 6px 0 22px; }
+  .eq .fn { color: var(--dim); }
+  .eq .code { color: var(--red); }
+  .vars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .var { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 16px 14px; position: relative; }
+  .var .lock {
+    position: absolute; top: -11px; right: 12px; font: 10.5px var(--mono);
+    padding: 2px 8px; border-radius: 99px; letter-spacing: .5px;
+  }
+  .pin { background: rgba(76,217,123,.15); color: var(--green); border: 1px solid rgba(76,217,123,.45); }
+  .free { background: rgba(255,107,107,.15); color: var(--red); border: 1px solid rgba(255,107,107,.45); }
+  .var h3 { font-size: 14px; margin-bottom: 6px; }
+  .var p { font-size: 12.5px; color: var(--dim); }
+  .var p b { color: var(--text); }
+  .why { margin-top: 18px; font-size: 13.5px; color: var(--dim); border-left: 3px solid var(--accent); padding-left: 14px; }
+  .why b { color: var(--text); }
+
+  /* ---- Diagram 3: the harness ---- */
+  .harness { display: flex; flex-direction: column; gap: 0; }
+  .hrow { display: flex; align-items: stretch; }
+  .hnode {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; flex: 1;
+  }
+  .hnode .t { font-weight: 600; font-size: 13.5px; }
+  .hnode .d { font-size: 11.5px; color: var(--dim); margin-top: 3px; }
+  .hnode .iss { font: 10.5px var(--mono); color: var(--accent); margin-top: 6px; }
+  .vline { text-align: center; color: var(--dim); font-size: 16px; line-height: 1.3; padding: 4px 0; }
+  .split { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .verdict { display: flex; gap: 14px; margin-top: 0; }
+  .verdict .hnode { text-align: center; }
+  .ok { border-color: rgba(76,217,123,.5); }
+  .bad { border-color: rgba(255,107,107,.5); }
+
+  /* ---- constraints ---- */
+  .cons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .con { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .con .t { font-size: 13px; font-weight: 600; }
+  .con .d { font-size: 12px; color: var(--dim); margin-top: 3px; }
+
+  .foot { margin-top: 56px; color: var(--dim); font-size: 12px; }
+  .foot code { font-family: var(--mono); }
+  @media (max-width: 760px) {
+    .sut, .vars, .split, .cons { grid-template-columns: 1fr; }
+    .flowrow { flex-direction: column; } .arr { justify-content: center; padding: 6px 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Benchmarking <span class="v2">Stellar RPC v2</span> — what's the actual problem?</h1>
+  <p class="sub">RPC v2 swaps a 7-day SQLite window for a full-history engine. Before it ships, the team must
+  prove it meets its SLAs and keep proving it on every change — and a benchmark number only means something
+  if everything <em>except</em> the code is held fixed.</p>
+
+  <!-- ============ 1. SYSTEM UNDER TEST ============ -->
+  <h2><span class="n">01</span>The system under test</h2>
+  <p class="lede">v1 stores ~7 days of ledgers in SQLite. v2 stores the <strong>entire chain</strong>
+  (60M+ ledgers, tens of billions of events, ~1.3&nbsp;TB) in two tiers — and every tier × data type
+  (ledgers / transactions / events) is a surface to benchmark.</p>
+
+  <div class="panel">
+    <div class="sut">
+      <div class="tier">
+        <span class="tag v1tag">RPC v1 — today</span>
+        <h3>SQLite, retention window</h3>
+        <p>One DB transaction per ledger; data older than ~7 days is trimmed.
+        Simple, but can't serve history. <b>The baseline to beat.</b></p>
+      </div>
+      <div class="tier">
+        <span class="tag hotT">HOT</span> <span class="tag coldT">COLD</span>
+        <h3>RPC v2 — full-history engine</h3>
+        <p><b style="color:var(--hot)">Hot:</b> the one live 10,000-ledger chunk, in RocksDB (writable, indexes in memory).<br>
+        <b style="color:var(--cold)">Cold:</b> everything older, frozen into immutable packfiles + MPHF/bitmap indexes — written once, never changed.</p>
+      </div>
+    </div>
+
+    <div class="flowrow">
+      <div class="node"><div class="t">Ledger stream</div><div class="d">live core / backfill / synthetic</div></div>
+      <div class="arr lab">→<span class="al">ingest</span></div>
+      <div class="node hot"><div class="t">Hot chunk (RocksDB)</div><div class="d">events · ledgers · txhash</div></div>
+      <div class="arr lab">→<span class="al">freeze @10k</span></div>
+      <div class="node cold"><div class="t">Cold chunks (packfiles)</div><div class="d">immutable, whole chain</div></div>
+      <div class="arr lab">→<span class="al">query</span></div>
+      <div class="node"><div class="t">JSON-RPC reads</div><div class="d">p99 ≤ 500 ms target</div></div>
+    </div>
+
+    <div class="measure">
+      <span class="chip">measure: <b>hot ingest</b> ledgers/s</span>
+      <span class="chip">measure: <b>cold/bulk ingest</b> (backfill)</span>
+      <span class="chip">measure: <b>freeze</b> hot→cold</span>
+      <span class="chip">measure: <b>hot query</b> latency</span>
+      <span class="chip">measure: <b>cold query</b> latency (index + scattered reads)</span>
+    </div>
+  </div>
+
+  <!-- ============ 2. THE EQUATION ============ -->
+  <h2><span class="n">02</span>Why it's hard: the measurement equation</h2>
+  <p class="lede">Every result is a function of four inputs. To attribute a change to the <strong>code</strong>,
+  the other three must be <strong>bit-identical between runs</strong> — and each one is independently
+  expensive to pin.</p>
+
+  <div class="panel">
+    <div class="eq"><span class="fn">result&nbsp;=&nbsp;f(</span><span class="code">code</span><span class="fn">,&nbsp;dataset,&nbsp;machine,&nbsp;starting&nbsp;DB&nbsp;state&nbsp;)</span></div>
+    <div class="vars">
+      <div class="var"><span class="lock free">VARY</span>
+        <h3>Code</h3>
+        <p>The PR under test. The <b>only</b> thing allowed to differ between a run and its baseline.</p>
+      </div>
+      <div class="var"><span class="lock pin">MUST PIN</span>
+        <h3>Dataset</h3>
+        <p>Real pubnet ledgers are whatever the network happened to produce — <b>not controllable, not reshapeable</b> (can't dial up Soroban load or event density).</p>
+      </div>
+      <div class="var"><span class="lock pin">MUST PIN</span>
+        <h3>Machine</h3>
+        <p>Cross-machine runs (c6id.2xl → 8xl, x86 vs Graviton) showed <b>large swings</b> in throughput &amp; latency. Numbers from random CI runners are noise.</p>
+      </div>
+      <div class="var"><span class="lock pin">MUST PIN</span>
+        <h3>Starting state</h3>
+        <p>Ingesting into an <b>empty</b> DB performs nothing like ingesting into one holding a week+ of history. Each run needs the same pre-filled DB, unmutated.</p>
+      </div>
+    </div>
+    <p class="why"><b>The crux:</b> pinning each variable has a real cost — generating deterministic data,
+    reserving fixed hardware, restoring a multi-hundred-GB database per run — and it all has to fit a CI
+    cadence and budget. The roadmap calls this out as risk #2: <em>“something we've never built … the
+    approach is unproven.”</em></p>
+  </div>
+
+  <!-- ============ 3. THE HARNESS ============ -->
+  <h2><span class="n">03</span>The harness being assembled (issue by issue)</h2>
+  <p class="lede">Each pinned variable maps to a concrete piece of work.</p>
+
+  <div class="panel harness">
+    <div class="split">
+      <div class="hnode">
+        <div class="t">Pin the dataset → synthetic ledgers</div>
+        <div class="d">stellar-core <code>apply-load</code> generates fake-but-realistic ledgers from a config + seed — deterministic, chunk-aligned. Three profiles: pubnet-current, pubnet-2×, event-stress.</div>
+        <div class="iss">#762 · #776 §6</div>
+      </div>
+      <div class="hnode">
+        <div class="t">Pin the machine → fixed bench hardware</div>
+        <div class="d">One representative instance type (matching recommended operator specs); cross-machine report exists to choose it knowingly.</div>
+        <div class="iss">#750 · v1 CI doc §V-Q1</div>
+      </div>
+      <div class="hnode">
+        <div class="t">Pin the state → “golden DB”</div>
+        <div class="d">A known-good pre-filled DB (e.g. 1 week ≈ 120,960 ledgers) cloned fresh per run — EBS volume clones mount in &lt;2 min; clone is discarded after the run.</div>
+        <div class="iss">v1 CI doc §II</div>
+      </div>
+    </div>
+    <div class="vline">↓ &nbsp; ↓ &nbsp; ↓</div>
+    <div class="hrow">
+      <div class="hnode">
+        <div class="t">Benchmark commands — one suite, all data types</div>
+        <div class="d">ingest + query benches (hot &amp; cold) running against the <em>production</em> ingesters, emitting CSV metrics. Scenario sweeps + methodology: cache eviction, warmup, rounds, percentiles.</div>
+        <div class="iss">#771 · #776 §7</div>
+      </div>
+    </div>
+    <div class="vline">↓</div>
+    <div class="hrow">
+      <div class="hnode">
+        <div class="t">CI runner — compare vs baseline</div>
+        <div class="d">Run on a defined dataset on every change; diff against the stored baseline.</div>
+        <div class="iss">#775</div>
+      </div>
+    </div>
+    <div class="vline">↓</div>
+    <div class="verdict">
+      <div class="hnode ok"><div class="t" style="color:var(--green)">within noise → pass</div><div class="d">also: numbers validate the §4 SLAs &amp; v1-vs-v2 claims</div></div>
+      <div class="hnode bad"><div class="t" style="color:var(--red)">regression → flag before merge</div><div class="d">the whole point: catch it before it lands</div></div>
+    </div>
+  </div>
+
+  <!-- ============ 4. CONSTRAINTS ============ -->
+  <h2><span class="n">04</span>The constraints that kill naive designs</h2>
+  <div class="cons">
+    <div class="con"><div class="t">⏱ CI-speed</div><div class="d">Must not run (much) longer than the other integration tests it sits beside.</div></div>
+    <div class="con"><div class="t">💰 Budget</div><div class="d">No $540/mo FSR snapshots, no io2 IOPS bills. Volume clones ≈ pay only while testing.</div></div>
+    <div class="con"><div class="t">🎯 Representative</div><div class="d">NVMe would give consistent numbers — but operators run GP3; its burstiness <em>is</em> the workload. Consistency ≠ relevance.</div></div>
+    <div class="con"><div class="t">♻️ Fresh state every run</div><div class="d">No tombstones, no copy-on-write artifacts, no test ledgers accumulating — each run starts from the identical golden DB.</div></div>
+  </div>
+
+  <p class="foot">Sources: RPC v2 roadmap (stellar-rpc #777) · issues #750, #762, #771, #775, #776 ·
+  “RPC Perf Evaluation — Ingestion CI Test” (v1 design doc) · RPC V2 Field Guide (onboarding).</p>
+
+</div>
+</body>
+</html>
