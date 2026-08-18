@@ -464,7 +464,7 @@
 
   <nav class="toc">
     <h4>The pipeline</h4>
-    <div class="grouplabel">The machine</div>
+    <div class="grouplabel">How it works</div>
     <ol>
       <li><a href="#arch">The architecture</a></li>
       <li><a href="#journey">One campaign, end to end</a></li>
@@ -487,7 +487,7 @@
       <div class="eyebrow">stellar-rpc · O3.1.2 · e2e benchmarking</div>
       <h1>Benchmarking RPC, end to end.</h1>
       <p class="deck">
-        Eight weeks ago, benchmarking RPC meant a hand-built box, a tmux session, and a spreadsheet.
+        A few weeks ago, benchmarking RPC meant a hand-built box, a tmux session, and a spreadsheet.
         Today it is <strong>one workflow dispatch</strong>: an ephemeral EC2 box builds the exact ref under
         test, ingests frozen datasets at phase pacing, publishes results to S3, the public results site
         updates, and Slack delivers the verdict. This page is the map — the layers we built around
@@ -507,8 +507,8 @@
       <h2><span class="num">01</span>The architecture: four layers, three repos</h2>
 
       <p>
-        The machine is four layers. Each layer has one job, does not know who calls it, and talks to its
-        neighbors through a narrow contract — CSV files, a TOML config, an S3 bundle. That separation is
+        The pipeline has four layers. Each layer does not know who calls it, and talks to its
+        neighbors through a narrow contract (CSV files, a TOML config, an S3 bundle). That separation is
         what let the layers be built, reviewed, and replaced independently: the bench commands landed in
         July, the runner was rewritten from bash to Go without touching them, and the GitHub Actions layer
         landed last without touching either.
@@ -523,7 +523,7 @@
         <div class="row">
           <span class="tag">layer 1</span>
           <span class="what">bench subcommands</span>
-          <span class="note"><code>bench-ingest cold|hot</code> and <code>bench-query</code>, inside the binary itself — the production ingestion path measured from within, emitting CSVs + <code>invocation.json</code>. <a href="https://github.com/stellar/stellar-rpc/issues/771">#771</a> → PR <a href="https://github.com/stellar/stellar-rpc/pull/857">#857</a></span>
+          <span class="note"><code>bench-ingest cold|hot</code>, inside the binary itself. The production ingestion path measured from within, emitting CSVs + <code>invocation.json</code>. <a href="https://github.com/stellar/stellar-rpc/issues/771">#771</a> → PR <a href="https://github.com/stellar/stellar-rpc/pull/857">#857</a></span>
         </div>
         <div class="row">
           <span class="tag">layer 2</span>
@@ -550,13 +550,16 @@
       </p>
 
       <figure class="figscroll">
-        <svg viewBox="0 0 960 520" role="img" aria-label="Map of the benchmark pipeline: GitHub Actions dispatches an ephemeral EC2 box, the box exchanges datasets and results with S3, the workflow polls a control bucket, then notifies Slack and ingests results into the Pages site." style="min-width: 760px; color: var(--ink);">
+        <svg viewBox="0 0 960 520" role="img" aria-label="Map of the benchmark pipeline: GitHub Actions dispatches an ephemeral EC2 box, the box exchanges datasets and results with S3, the workflow polls a control bucket, and on a pass the notify job pulls the bundle from S3, ingests it into the Pages site, and alerts Slack." style="min-width: 760px; color: var(--ink);">
           <defs>
             <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
             </marker>
             <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="#c14b27"/>
+            </marker>
+            <marker id="arrT" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#2a6f6b"/>
             </marker>
           </defs>
 
@@ -634,9 +637,18 @@
           <text x="358" y="420" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">relay polls</text>
           <text x="358" y="434" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">every 30 s</text>
 
-          <!-- ingest -->
-          <line x1="630" y1="255" x2="698" y2="255" stroke="#2a6f6b" stroke-width="1.4" marker-end="url(#arr)" style="color:#2a6f6b"/>
-          <text x="636" y="243" font-family="Inter, sans-serif" font-size="10.5" fill="#2a6f6b">ingest on pass</text>
+          <!-- ingest: the notify job pulls the bundle from S3, then pushes it into the site -->
+          <line x1="610" y1="200" x2="610" y2="122" stroke="#2a6f6b" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <text x="602" y="152" text-anchor="end" font-family="Inter, sans-serif" font-size="10.5" fill="#2a6f6b">notify pulls the</text>
+          <text x="602" y="166" text-anchor="end" font-family="Inter, sans-serif" font-size="10.5" fill="#2a6f6b">bundle on pass</text>
+          <line x1="720" y1="120" x2="720" y2="198" stroke="#2a6f6b" stroke-width="1.4" marker-end="url(#arrT)"/>
+          <text x="728" y="152" font-family="JetBrains Mono, Menlo, monospace" font-size="10" fill="#2a6f6b">ingest.sh</text>
+          <text x="728" y="166" font-family="JetBrains Mono, Menlo, monospace" font-size="10" fill="#2a6f6b">--push-main</text>
+
+          <!-- provenance: the site's run files are built from bundles in the bucket -->
+          <text x="665" y="182" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" fill="#2a6f6b">files sourced</text>
+          <text x="665" y="194" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" fill="#2a6f6b">from bundles</text>
+          <line x1="698" y1="212" x2="634" y2="212" stroke="#2a6f6b" stroke-width="1.4" marker-end="url(#arrT)"/>
 
           <!-- notify -->
           <path d="M 665 120 L 665 461 L 698 461" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
@@ -644,9 +656,10 @@
           <text x="673" y="434" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">verdict</text>
         </svg>
         <figcaption>
-          The whole machine on one screen. GitHub Actions is control, S3 is data, the box is compute, the
+          The whole pipeline on one screen. GitHub Actions is control, S3 is data, the box is compute, the
           site is the record, Slack is the doorbell. The box holds no GitHub credential — it talks only to the
-          two buckets through its instance profile.
+          two buckets through its instance profile. The site never watches the bucket: on a pass, the
+          notify job pulls the bundle from S3 and pushes the converted run into the site.
         </figcaption>
       </figure>
     </section>
@@ -1034,7 +1047,7 @@
 
             <rect x="348" y="20" width="130" height="52" rx="6" fill="#e0eeec" stroke="#2a6f6b"/>
             <text x="413" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#2a6f6b">tx submission</text>
-            <text x="413" y="60" text-anchor="middle" font-size="11" fill="#2a6f6b">p99 60 ms · measured #869</text>
+            <text x="413" y="60" text-anchor="middle" font-size="11" fill="#2a6f6b">p99 60 ms · #869</text>
 
             <rect x="486" y="20" width="250" height="52" rx="6" fill="#f3e7e0" stroke="#c14b27" stroke-width="1.6"/>
             <text x="611" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#9a3a1c">ingest</text>
@@ -1056,7 +1069,7 @@
         </figcaption>
       </figure>
 
-      <h3>What the machine has already told us</h3>
+      <h3>What the pipeline has already told us</h3>
 
       <div class="tablewrap">
       <table>
@@ -1089,7 +1102,7 @@
       <p>
         SAC is the binding profile at every phase — its fresh-address-per-transfer pattern grows Core's
         in-memory Soroban state without bound, and the apply-stage tail owns most of every miss. The
-        machine did its job twice over: it isolated the bottleneck, and three weeks later the same
+        pipeline did its job twice over: it isolated the bottleneck, and three weeks later the same
         pipeline validated <a href="https://github.com/stellar/stellar-rpc/pull/902">#902</a>'s
         hot-ingest optimizations — Phase 3 green on the 8x box. Finding the problem and proving the fix
         ran through the same door.
