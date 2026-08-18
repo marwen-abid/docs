@@ -487,10 +487,9 @@
       <div class="eyebrow">stellar-rpc · O3.1.2 · e2e benchmarking</div>
       <h1>Benchmarking RPC, end to end.</h1>
       <p class="deck">
-        A few weeks ago, benchmarking RPC meant a hand-built box, a tmux session, and a spreadsheet.
-        Today it is <strong>one workflow dispatch</strong>: an ephemeral EC2 box builds the exact ref under
+        The goal is to provide developers with <strong>one workflow</strong>: an ephemeral EC2 box builds the <code>stellar-rpc</code> ref under
         test, ingests frozen datasets at phase pacing, publishes results to S3, the public results site
-        updates, and Slack delivers the verdict. This page is the map — the layers we built around
+        updates, and Slack delivers the verdict. This document presents the layers we built around
         <code>stellar-rpc</code>, the journey of one campaign, the methodology behind the numbers, and the
         PRs that got us here.
       </p>
@@ -507,11 +506,11 @@
       <h2><span class="num">01</span>The architecture: four layers, three repos</h2>
 
       <p>
-        The pipeline has four layers. Each layer does not know who calls it, and talks to its
-        neighbors through a narrow contract (CSV files, a TOML config, an S3 bundle). That separation is
-        what let the layers be built, reviewed, and replaced independently: the bench commands landed in
-        July, the runner was rewritten from bash to Go without touching them, and the GitHub Actions layer
-        landed last without touching either.
+        The pipeline is four loosely coupled layers. Each exposes a narrow interface — CSV files, a TOML
+        config, an S3 bundle — and is caller-agnostic: it cannot tell whether a laptop or CI is driving
+        it. That decoupling let each layer be built, reviewed, and replaced independently: the bench
+        commands landed in July, the runner was rewritten from bash to Go without touching them, and the
+        GitHub Actions layer landed last without touching either.
       </p>
 
       <div class="stack">
