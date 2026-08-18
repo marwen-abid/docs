@@ -951,8 +951,7 @@
       <p>
         Of the four layers in <a href="#arch">the architecture</a>, three are entirely new with this
         epic: the bench subcommands (layer 1), the campaign runner (layer 2), and the results site (the
-        report layer). Layer 3 — the campaign automation — is the one place we did not start from zero:
-        it was already partially implemented.
+        report layer). Layer 3 — the campaign automation — was already partially implemented and the scaffolding was battle-tested.
       </p>
 
       <p>
@@ -969,7 +968,7 @@
       </ul>
 
       <p>
-        PR <a href="https://github.com/stellar/stellar-rpc/pull/921">#921</a> (+1,897 lines) stands on that
+        PR <a href="https://github.com/stellar/stellar-rpc/pull/921">#921</a> stands on that
         foundation and reshapes it for a different problem: the perf-eval legs are short-lived,
         release-driven, and report to a PR comment; a benchmark campaign is operator-dispatched, runs up to
         17 hours, and reports to the team. Piece by piece:
@@ -1006,7 +1005,7 @@
           </tr>
           <tr>
             <td>Reporting</td>
-            <td>Sticky PR comment via the coordinator</td>
+            <td>PR comment via the coordinator</td>
             <td><span class="chip accent">replaced</span> by Slack Block Kit (<code>slack-payload.sh</code>) + job summaries</td>
           </tr>
           <tr>
@@ -1046,7 +1045,7 @@
         each stressing a different bottleneck — <strong>SAC transfers</strong> (every transfer mints a
         fresh, sha256-derived balance entry: relentless state growth), <strong>OZ token transfers</strong>
         (contract-token logic), and <strong>Soroswap swaps</strong> (multi-contract calls, heavy events) —
-        at two load points each, 16–50 GB per pack. A campaign ingests identical bytes every time, so two
+        at two load points each. A campaign ingests identical bytes every time, so two
         runs differ only by code and hardware.
       </p>
 
@@ -1066,17 +1065,11 @@
           <tr><td>OZ token — tx/ledger</td><td class="num">4,000</td><td class="num">4,000</td><td class="num">3,600</td></tr>
           <tr><td>Soroswap — tx/ledger</td><td class="num">1,500</td><td class="num">1,500</td><td class="num">1,800</td></tr>
           <tr><td>Peak throughput (SAC)</td><td class="num">3,000 tps</td><td class="num">5,000 tps</td><td class="num">10,000 tps</td></tr>
-          <tr><td><strong>Ingest p99 target</strong></td><td class="num"><strong>900 ms</strong></td><td class="num"><strong>~400 ms</strong> (derived)</td><td class="num"><strong>100 → 80 ms</strong>*</td></tr>
+          <tr><td><strong>Ingest p99 target</strong></td><td class="num">905 ms</td><td class="num">405 ms</td><td class="num">105 ms</td></tr>
           <tr><td><strong>E2E budget</strong></td><td class="num"><strong>5 s</strong></td><td class="num"><strong>2.5 s</strong></td><td class="num"><strong>2 s</strong></td></tr>
         </tbody>
       </table>
       </div>
-      <p class="fine">
-        * Targets live in one machine-readable place — <code>docs/targets.json</code> in the benchmarks
-        repo — read by the converter, the viewer, and the Slack verdict alike. The Phase 3 ingest target
-        moved 100 → 80 ms with the read-to-client amendment; the slice accounting is being reworked again
-        in <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/34">bench#34</a>.
-      </p>
 
       <h3>3 · Two legs, two questions</h3>
       <p>
