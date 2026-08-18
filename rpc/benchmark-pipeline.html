@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The RPC Benchmark Pipeline</title>
+<style>
+  html { color-scheme: light; }
+  img { max-width: 100%; }
+</style>
+<style>
+  :root {
+    --bg: #faf8f4;
+    --bg-tint: #f4efe6;
+    --ink: #1a1a1a;
+    --ink-soft: #4a4a4a;
+    --ink-faint: #7a7468;
+    --rule: #d8d2c4;
+    --rule-soft: #ebe6dc;
+    --accent: #c14b27;
+    --accent-deep: #9a3a1c;
+    --accent-soft: #f3e7e0;
+    --teal: #2a6f6b;
+    --teal-soft: #e0eeec;
+    --code-bg: #0f1115;
+    --code-ink: #e3e1d8;
+    --code-key: #c8a96a;
+    --code-str: #93c47d;
+    --code-com: #6c7a89;
+    --good: #2e7d3a;
+    --warn: #b07b00;
+    --bad: #b3261e;
+    --muted-bg: #f1ece2;
+  }
+
+  * { box-sizing: border-box; }
+  html { margin: 0; padding: 0; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.58;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 790px);
+    gap: 56px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 32px 140px;
+  }
+
+  /* ---- Table of contents ---- */
+  nav.toc {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    border-left: 1px solid var(--rule);
+    padding-left: 18px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+  nav.toc h4 {
+    margin: 0 0 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  nav.toc ol { list-style: none; margin: 0 0 18px; padding: 0; counter-reset: tocnum; }
+  nav.toc ol.c2 { counter-reset: tocnum 3; }
+  nav.toc ol.c3 { counter-reset: tocnum 4; }
+  nav.toc ol li { counter-increment: tocnum; margin: 7px 0; }
+  nav.toc ol li::before {
+    content: counter(tocnum, decimal-leading-zero);
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    margin-right: 8px;
+    font-size: 11px;
+  }
+  nav.toc .grouplabel {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 16px 0 6px;
+  }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); }
+
+  main { min-width: 0; }
+
+  /* ---- Header ---- */
+  .eyebrow {
+    font-family: "Inter", sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 45px;
+    line-height: 1.06;
+    margin: 6px 0 14px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  .deck {
+    font-size: 19px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    max-width: 64ch;
+    margin: 0 0 28px;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 26px;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 0;
+    margin: 0 0 36px;
+    font-family: "Inter", sans-serif;
+    font-size: 12.5px;
+  }
+  .meta dt { font-weight: 600; color: var(--ink); margin-right: 6px; }
+  .meta dd { margin: 0; color: var(--ink-soft); }
+  .meta-pair { display: flex; gap: 6px; }
+
+  /* ---- Headings ---- */
+  h2 {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 29px;
+    font-weight: 600;
+    margin: 70px 0 8px;
+    letter-spacing: -0.01em;
+    scroll-margin-top: 24px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    color: var(--accent);
+    font-family: "Inter", sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    display: block;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+  }
+  h3 {
+    font-family: "Inter", sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    margin: 36px 0 8px;
+    color: var(--ink);
+  }
+  h4 {
+    font-family: "Inter", sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin: 24px 0 6px;
+  }
+  p { margin: 0 0 14px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+  a { color: var(--accent-deep); }
+
+  code {
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-size: 13.5px;
+    background: var(--muted-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 7px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-size: 12.7px;
+    line-height: 1.6;
+    margin: 16px 0 20px;
+    box-shadow: 0 0 0 1px #20232a inset;
+  }
+  pre code { background: transparent; padding: 0; color: inherit; font-size: inherit; }
+  .k  { color: var(--code-key); }
+  .s  { color: var(--code-str); }
+  .c  { color: var(--code-com); font-style: italic; }
+
+  /* ---- Callouts ---- */
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 13px 18px;
+    margin: 20px 0;
+    font-size: 15px;
+    border-radius: 0 4px 4px 0;
+  }
+  .callout.neutral { border-color: var(--rule); background: var(--muted-bg); }
+  .callout.teal { border-color: var(--teal); background: var(--teal-soft); }
+  .callout .label {
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .callout.neutral .label { color: var(--ink-soft); }
+  .callout.teal .label { color: var(--teal); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* ---- Tables ---- */
+  .tablewrap { overflow-x: auto; margin: 16px 0 24px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Inter", sans-serif;
+    font-size: 13px;
+    margin: 16px 0 24px;
+  }
+  .tablewrap table { margin: 0; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th { border-bottom: 1px solid var(--ink); font-weight: 600; color: var(--ink); }
+  td code { font-size: 12px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---- Chips ---- */
+  .chip {
+    display: inline-block;
+    font-family: "Inter", sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--muted-bg);
+    color: var(--ink-soft);
+    margin-right: 4px;
+    vertical-align: 1px;
+    white-space: nowrap;
+  }
+  .chip.accent  { background: var(--accent-soft); color: var(--accent); }
+  .chip.good    { background: #e6f1e6; color: var(--good); }
+  .chip.warn    { background: #fbf0d0; color: var(--warn); }
+  .chip.bad     { background: #f7e2e0; color: var(--bad); }
+  .chip.teal    { background: var(--teal-soft); color: var(--teal); }
+
+  /* ---- Layer stack ---- */
+  .stack { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin: 16px 0 28px; background: #fff; }
+  .stack .row {
+    padding: 11px 16px; border-bottom: 1px solid var(--rule-soft);
+    font-family: "Inter", sans-serif; font-size: 14px; display: flex; align-items: center; gap: 14px;
+  }
+  .stack .row:last-child { border-bottom: 0; }
+  .stack .row .tag {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+    width: 86px; flex-shrink: 0; color: var(--ink-faint);
+  }
+  .stack .row.this { background: var(--accent-soft); }
+  .stack .row.this .tag { color: var(--accent); }
+  .stack .row.teal { background: var(--teal-soft); }
+  .stack .row.teal .tag { color: var(--teal); }
+  .stack .row.foundation { background: var(--muted-bg); }
+  .stack .row.foundation .tag { color: var(--ink-soft); }
+  .stack .row .what { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 12.5px; font-weight: 600; width: 175px; flex-shrink: 0; }
+  .stack .row .note { font-family: "Iowan Old Style", Georgia, serif; color: var(--ink-soft); flex: 1; font-size: 13.5px; }
+
+  /* ---- Lifecycle spine ---- */
+  .spine {
+    background: var(--muted-bg); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 22px 18px; margin: 16px 0 10px; overflow-x: auto;
+  }
+  .spine .trklabel {
+    font-family: "Inter", sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 8px; min-width: 680px;
+  }
+  .spine .track { display: flex; align-items: stretch; gap: 0; font-family: "Inter", sans-serif; min-width: 680px; }
+  .spine .track + .trklabel { margin-top: 18px; }
+  .spine .node {
+    flex: 1; text-align: center; padding: 12px 8px; border-radius: 6px; font-size: 12.5px; font-weight: 600;
+    border: 1.5px solid transparent; position: relative;
+  }
+  .spine .node small { display:block; font-weight: 400; font-size: 11px; margin-top: 3px; opacity: 0.85; }
+  .spine .node.lit { background: #fff; border-color: var(--accent); color: var(--accent-deep); box-shadow: 0 1px 4px rgba(193,75,39,.12); }
+  .spine .node.alt { background: #fff; border-color: var(--teal); color: var(--teal); box-shadow: 0 1px 4px rgba(42,111,107,.12); }
+  .spine .arrow { display: flex; align-items: center; padding: 0 4px; color: var(--ink-faint); font-weight: 700; }
+  .spine-legend { font-family: "Inter", sans-serif; font-size: 11.5px; color: var(--ink-soft); margin: 8px 2px 24px; display: flex; gap: 18px; flex-wrap: wrap; }
+  .spine-legend span::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--accent); vertical-align: middle; margin-right: 6px; }
+  .spine-legend span.alt::before { border-top: 2px solid var(--teal); }
+
+  /* ---- Figures ---- */
+  figure { margin: 20px 0 26px; }
+  figure svg { max-width: 100%; height: auto; display: block; }
+  figcaption {
+    font-family: "Inter", sans-serif; font-size: 12.5px; color: var(--ink-faint);
+    margin-top: 10px; line-height: 1.5;
+  }
+  .figscroll { overflow-x: auto; }
+
+  /* ---- GitHub run mockup ---- */
+  .gh {
+    border: 1px solid var(--rule); border-radius: 8px; background: #fff;
+    margin: 16px 0 8px; font-family: "Inter", sans-serif;
+  }
+  .gh-head {
+    display: flex; gap: 10px 28px; padding: 13px 18px; border-bottom: 1px solid var(--rule-soft);
+    font-size: 12.5px; align-items: baseline; flex-wrap: wrap;
+  }
+  .gh-head .gh-kv { color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px; }
+  .gh-head .gh-v { font-weight: 600; font-size: 13.5px; }
+  .gh-head .gh-v.ok { color: var(--good); }
+  .gh-branch { font-family: "JetBrains Mono", Menlo, monospace; font-size: 11.5px; background: #eaf2fb; color: #1a5da8; border-radius: 4px; padding: 2px 7px; }
+  .gh-file { padding: 12px 18px 0; font-size: 13.5px; font-weight: 700; }
+  .gh-file small { display: block; font-weight: 400; color: var(--ink-faint); font-size: 11.5px; margin-top: 1px; }
+  .gh-graph { padding: 20px 18px 22px; overflow-x: auto; }
+  .gh-track { display: flex; align-items: center; min-width: 980px; }
+  .gh-job {
+    border: 1px solid var(--rule); border-radius: 7px; padding: 8px 11px; font-size: 11.5px;
+    display: flex; gap: 8px; align-items: center; white-space: nowrap; background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05); flex-shrink: 0;
+  }
+  .gh-job .dur { color: var(--ink-faint); font-size: 10.5px; margin-left: 2px; }
+  .gh-job.skip { border-style: dashed; color: var(--ink-faint); box-shadow: none; }
+  .st {
+    width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700;
+  }
+  .st.ok { background: var(--good); color: #fff; }
+  .st.skip { background: transparent; color: var(--ink-faint); border: 1.5px solid var(--rule); }
+  .gh-link { width: 26px; height: 1.5px; background: var(--rule); flex-shrink: 0; }
+  .gh-forkcol { display: flex; flex-direction: column; gap: 10px; }
+
+  /* ---- Slack mockup ---- */
+  .slack {
+    border: 1px solid var(--rule); border-radius: 8px; background: #fff;
+    padding: 14px 18px 12px; margin: 16px 0 8px; font-family: "Inter", sans-serif;
+    font-size: 14px; max-width: 660px; line-height: 1.45;
+  }
+  .slack .hd { display: flex; gap: 10px; align-items: center; margin-bottom: 2px; }
+  .slack .ava {
+    width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg, #d97f3e, #8a5a2b);
+    display: flex; align-items: center; justify-content: center; font-size: 19px;
+  }
+  .slack .who { font-weight: 800; font-size: 14.5px; }
+  .slack .app { font-size: 10px; font-weight: 700; color: var(--ink-faint); background: var(--muted-bg); border-radius: 3px; padding: 1px 4px; vertical-align: 1px; margin-left: 5px; }
+  .slack .ts { color: var(--ink-faint); font-size: 12px; margin-left: 7px; font-weight: 400; }
+  .slack .att { border-left: 4px solid var(--rule); padding: 4px 0 4px 14px; margin: 8px 0 0 46px; }
+  .slack .att.good { border-color: #2eb67d; }
+  .slack .att.bad { border-color: #e01e5a; }
+  .slack .att.warn { border-color: #ecb22e; }
+  .slack .title { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+  .slack p { font-size: 13.5px; margin: 0 0 10px; }
+  .slack .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; margin: 10px 0; }
+  .slack .f b { display: block; font-size: 13px; }
+  .slack .f span { font-size: 13px; color: var(--ink-soft); }
+  .slack .btns { display: flex; gap: 8px; margin: 12px 0 8px; flex-wrap: wrap; }
+  .slack .btn {
+    border: 1px solid var(--rule); border-radius: 5px; padding: 5px 13px;
+    font-weight: 700; font-size: 12.5px; color: var(--ink); background: #fff;
+  }
+  .slack .btn.primary { background: #007a5a; border-color: #007a5a; color: #fff; }
+  .slack .quote {
+    border-left: 3px solid var(--rule-soft); padding: 2px 0 2px 10px; margin: 8px 0;
+    font-family: "JetBrains Mono", Menlo, monospace; font-size: 11.5px; color: var(--ink-soft);
+    white-space: pre-wrap;
+  }
+  .slack .ctx { font-size: 12px; color: var(--ink-faint); margin-top: 8px; }
+  .slack .scode {
+    font-family: "JetBrains Mono", Menlo, monospace; font-size: 11.5px;
+    color: #e01e5a; background: #faf7f5; border: 1px solid var(--rule-soft);
+    border-radius: 3px; padding: 0 4px;
+  }
+  .slack ul.plain { list-style: none; padding: 0; margin: 0 0 8px; }
+  .slack ul.plain li { margin: 4px 0; font-size: 13.5px; }
+  .slack .lights { list-style: none; padding: 0; margin: 6px 0 4px; }
+  .slack .lights li { margin: 5px 0; font-size: 13.5px; }
+  .slack .lights .dot { display: inline-block; width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #6fdb8f, #2e7d3a); margin-right: 7px; vertical-align: -1px; }
+  .slack .sechead { font-weight: 800; font-size: 13.5px; margin: 10px 0 2px; }
+  .slack .em { font-style: italic; color: var(--ink-soft); font-size: 12.5px; }
+
+  /* ---- Dispatch form mockup ---- */
+  .dispatchrow { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; margin: 18px 0 8px; }
+  .dispatch {
+    border: 1px solid var(--rule); border-radius: 10px; background: #fff;
+    width: 330px; flex-shrink: 0; font-family: "Inter", sans-serif; font-size: 12.5px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.06);
+  }
+  .dispatch .dhead {
+    padding: 12px 16px; border-bottom: 1px solid var(--rule-soft);
+    font-weight: 700; font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .dispatch .dbranch { font-weight: 600; font-size: 11.5px; background: var(--muted-bg); border-radius: 5px; padding: 3px 9px; }
+  .dispatch .dbody { padding: 12px 16px 16px; }
+  .dispatch label {
+    display: block; font-family: "JetBrains Mono", Menlo, monospace;
+    font-size: 10.8px; font-weight: 700; margin: 11px 0 4px; line-height: 1.4;
+  }
+  .dispatch label:first-child { margin-top: 0; }
+  .dispatch label .req { color: var(--bad); }
+  .dispatch .sel {
+    border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12.5px; color: var(--ink); background: #fdfcfa;
+  }
+  .dispatch .sel .car { color: var(--ink-faint); font-size: 10px; }
+  .dispatch .sel.empty { color: var(--ink-faint); }
+  .dispatch .runbtn {
+    margin-top: 16px; background: #1f883d; color: #fff; border-radius: 6px;
+    text-align: center; font-weight: 700; font-size: 13px; padding: 8px 0;
+  }
+  .dispatch-notes { flex: 1; min-width: 260px; }
+  .dispatch-notes ul { margin: 0 0 14px; padding-left: 20px; }
+  .dispatch-notes li { margin: 7px 0; font-size: 15px; }
+
+  /* ---- E2E bar ---- */
+  .e2ebar { margin: 18px 0 4px; }
+  .e2e-legend { font-family: "Inter", sans-serif; font-size: 12px; color: var(--ink-soft); display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 20px; }
+  .e2e-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--rule); }
+
+  /* ---- footnote ---- */
+  .foot {
+    font-size: 13px; color: var(--ink-soft); font-family: "Inter", sans-serif;
+    margin-top: 72px; padding-top: 18px; border-top: 1px solid var(--rule);
+  }
+  .foot code { font-size: 12px; }
+  .fine { color: var(--ink-faint); font-size: 13.5px; font-family: "Inter", sans-serif; }
+
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 40px 0; }
+  ul, ol.body { margin: 0 0 14px; padding-left: 22px; }
+  ul li, ol.body li { margin: 5px 0; }
+  :target { scroll-margin-top: 24px; }
+
+  @media (max-width: 920px) {
+    .layout { grid-template-columns: 1fr; gap: 24px; padding: 32px 20px 80px; }
+    nav.toc { position: static; border-left: 0; padding-left: 0; max-height: none; }
+    .slack .fields { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <nav class="toc">
+    <h4>The pipeline</h4>
+    <div class="grouplabel">The machine</div>
+    <ol>
+      <li><a href="#arch">The architecture</a></li>
+      <li><a href="#journey">One campaign, end to end</a></li>
+      <li><a href="#actions">Prior art &amp; PR #921</a></li>
+    </ol>
+    <div class="grouplabel">The numbers</div>
+    <ol class="c2">
+      <li><a href="#method">The methodology</a></li>
+    </ol>
+    <div class="grouplabel">The record</div>
+    <ol class="c3">
+      <li><a href="#trail">The paper trail</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- =================================================== -->
+    <section id="top">
+      <div class="eyebrow">stellar-rpc · O3.1.2 · e2e benchmarking</div>
+      <h1>Benchmarking RPC, end to end.</h1>
+      <p class="deck">
+        Eight weeks ago, benchmarking RPC meant a hand-built box, a tmux session, and a spreadsheet.
+        Today it is <strong>one workflow dispatch</strong>: an ephemeral EC2 box builds the exact ref under
+        test, ingests frozen datasets at phase pacing, publishes results to S3, the public results site
+        updates, and Slack delivers the verdict. This page is the map — the layers we built around
+        <code>stellar-rpc</code>, the journey of one campaign, the methodology behind the numbers, and the
+        PRs that got us here.
+      </p>
+
+      <dl class="meta">
+        <div class="meta-pair"><dt>Epic</dt><dd><a href="https://github.com/stellar/stellar-rpc/issues/898">#898</a> · O3.1.2 — 9 of 15 sub-issues closed</dd></div>
+        <div class="meta-pair"><dt>Status</dt><dd>automated campaigns green since 2026-08-07</dd></div>
+        <div class="meta-pair"><dt>Repos</dt><dd>stellar-rpc · stellar-rpc-benchmarks · terraform</dd></div>
+      </dl>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="arch">
+      <h2><span class="num">01</span>The architecture: four layers, three repos</h2>
+
+      <p>
+        The machine is four layers. Each layer has one job, does not know who calls it, and talks to its
+        neighbors through a narrow contract — CSV files, a TOML config, an S3 bundle. That separation is
+        what let the layers be built, reviewed, and replaced independently: the bench commands landed in
+        July, the runner was rewritten from bash to Go without touching them, and the GitHub Actions layer
+        landed last without touching either.
+      </p>
+
+      <div class="stack">
+        <div class="row foundation">
+          <span class="tag">system</span>
+          <span class="what">stellar-rpc</span>
+          <span class="note">The system under test — RPC&nbsp;v2 with full-history storage. Every campaign benchmarks one ref of this repo, built from source on the box.</span>
+        </div>
+        <div class="row">
+          <span class="tag">layer 1</span>
+          <span class="what">bench subcommands</span>
+          <span class="note"><code>bench-ingest cold|hot</code> and <code>bench-query</code>, inside the binary itself — the production ingestion path measured from within, emitting CSVs + <code>invocation.json</code>. <a href="https://github.com/stellar/stellar-rpc/issues/771">#771</a> → PR <a href="https://github.com/stellar/stellar-rpc/pull/857">#857</a></span>
+        </div>
+        <div class="row">
+          <span class="tag">layer 2</span>
+          <span class="what">campaign runner</span>
+          <span class="note">The Go <code>campaign</code> CLI (<code>stellar-rpc-benchmarks/runner</code>): TOML in → preflight → build the ref → fetch golden packs → run the legs → bundle → publish. <a href="https://github.com/stellar/stellar-rpc/issues/896">#896</a></span>
+        </div>
+        <div class="row this">
+          <span class="tag">layer 3</span>
+          <span class="what">campaign automation</span>
+          <span class="note">GitHub Actions in <code>stellar-rpc</code>: <code>bench-campaign.yml</code> dispatches, launches, awaits, notifies; <code>bench-reaper.yml</code> guards the fleet. <a href="https://github.com/stellar/stellar-rpc/issues/868">#868</a> → PR <a href="https://github.com/stellar/stellar-rpc/pull/921">#921</a></span>
+        </div>
+        <div class="row teal">
+          <span class="tag">report</span>
+          <span class="what">results site</span>
+          <span class="note"><code>stellar-rpc-benchmarks</code>: <code>ingest.sh</code> converts each bundle into a run JSON; GitHub Pages renders it; <code>targets.json</code> is the single source of phase targets. <a href="https://github.com/stellar/stellar-rpc/issues/871">#871</a></span>
+        </div>
+      </div>
+
+      <p>
+        Around the layers sit two S3 buckets and Slack. <code>stellar-rpc-bench</code> is the data plane —
+        frozen datasets in, result bundles out. <code>stellar-rpc-ci-load-test</code> is the control plane —
+        a tiny <code>result.json</code> the box writes and the workflow polls. The box never holds a GitHub
+        credential; its instance profile can only touch the two buckets.
+      </p>
+
+      <figure class="figscroll">
+        <svg viewBox="0 0 960 520" role="img" aria-label="Map of the benchmark pipeline: GitHub Actions dispatches an ephemeral EC2 box, the box exchanges datasets and results with S3, the workflow polls a control bucket, then notifies Slack and ingests results into the Pages site." style="min-width: 760px; color: var(--ink);">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="#c14b27"/>
+            </marker>
+          </defs>
+
+          <!-- operator -->
+          <text x="30" y="26" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="currentColor">operator</text>
+          <text x="88" y="26" font-family="Inter, sans-serif" font-size="11.5" fill="#7a7468">— dispatches phase · machine · ref</text>
+          <line x1="60" y1="34" x2="60" y2="50" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
+
+          <!-- GHA strip -->
+          <rect x="20" y="52" width="920" height="68" rx="8" fill="#ffffff" stroke="currentColor" stroke-width="1.2"/>
+          <text x="36" y="76" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="currentColor">GitHub Actions — bench-campaign.yml</text>
+          <text x="36" y="93" font-family="JetBrains Mono, Menlo, monospace" font-size="10.5" fill="#7a7468">stellar/stellar-rpc · concurrency: rpc-bench</text>
+          <g font-family="Inter, sans-serif" font-size="11" fill="currentColor">
+            <rect x="330" y="68" width="58" height="24" rx="12" fill="#f1ece2"/><text x="359" y="84" text-anchor="middle">validate</text>
+            <rect x="396" y="68" width="54" height="24" rx="12" fill="#f1ece2"/><text x="423" y="84" text-anchor="middle">launch</text>
+            <rect x="458" y="68" width="112" height="24" rx="12" fill="#f3e7e0"/><text x="514" y="84" text-anchor="middle" fill="#9a3a1c">await ×4 · poll-relay</text>
+            <rect x="578" y="68" width="52" height="24" rx="12" fill="#f1ece2"/><text x="604" y="84" text-anchor="middle">notify</text>
+            <rect x="638" y="68" width="76" height="24" rx="12" fill="#f1ece2"/><text x="676" y="84" text-anchor="middle">terminate</text>
+          </g>
+
+          <!-- EC2 box -->
+          <rect x="40" y="200" width="260" height="170" rx="8" fill="#ffffff" stroke="#c14b27" stroke-width="1.5"/>
+          <text x="58" y="228" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#9a3a1c">Ephemeral EC2 campaign box</text>
+          <text x="58" y="245" font-family="Inter, sans-serif" font-size="11" fill="#7a7468">m6id.2xlarge or c6id.8xlarge · NVMe</text>
+          <g font-family="JetBrains Mono, Menlo, monospace" font-size="10.5" fill="currentColor">
+            <rect x="58" y="258" width="224" height="22" rx="4" fill="#f1ece2"/><text x="68" y="273">run-campaign.sh · bootstrap</text>
+            <rect x="58" y="286" width="224" height="22" rx="4" fill="#f1ece2"/><text x="68" y="301">runner: campaign CLI</text>
+            <rect x="58" y="314" width="224" height="22" rx="4" fill="#f1ece2"/><text x="68" y="329">stellar-rpc @ ref · bench-ingest</text>
+          </g>
+          <text x="58" y="358" font-family="Inter, sans-serif" font-size="10.5" fill="#7a7468">tags: rpc-bench · run-id · deadline</text>
+
+          <!-- data bucket -->
+          <rect x="390" y="200" width="240" height="110" rx="8" fill="#ffffff" stroke="currentColor" stroke-width="1.2"/>
+          <text x="408" y="228" font-family="JetBrains Mono, Menlo, monospace" font-size="11.5" font-weight="700" fill="currentColor">s3://stellar-rpc-bench</text>
+          <text x="408" y="250" font-family="Inter, sans-serif" font-size="11.5" fill="#4a4a4a">inputs/ — six golden packs</text>
+          <text x="408" y="268" font-family="Inter, sans-serif" font-size="11.5" fill="#4a4a4a">results/&lt;run_id&gt;/ — bundles</text>
+          <text x="408" y="292" font-family="Inter, sans-serif" font-size="10.5" fill="#7a7468">immutable · the data plane</text>
+
+          <!-- site -->
+          <rect x="700" y="200" width="240" height="110" rx="8" fill="#e0eeec" stroke="#2a6f6b" stroke-width="1.4"/>
+          <text x="718" y="228" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="#2a6f6b">Results site · GitHub Pages</text>
+          <text x="718" y="250" font-family="Inter, sans-serif" font-size="11.5" fill="#2a6f6b">stellar-rpc-benchmarks</text>
+          <text x="718" y="268" font-family="JetBrains Mono, Menlo, monospace" font-size="10.5" fill="#2a6f6b">ingest.sh → docs/runs/&lt;id&gt;.json</text>
+          <text x="718" y="292" font-family="JetBrains Mono, Menlo, monospace" font-size="10.5" fill="#2a6f6b">?run=&lt;run_id&gt;</text>
+
+          <!-- control bucket -->
+          <rect x="40" y="430" width="260" height="62" rx="8" fill="#ffffff" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 4"/>
+          <text x="58" y="454" font-family="JetBrains Mono, Menlo, monospace" font-size="11" font-weight="700" fill="currentColor">s3://stellar-rpc-ci-load-test</text>
+          <text x="58" y="474" font-family="Inter, sans-serif" font-size="10.5" fill="#7a7468">result.json · run-info.json · box log — the control plane</text>
+
+          <!-- slack -->
+          <rect x="700" y="430" width="240" height="62" rx="8" fill="#ffffff" stroke="currentColor" stroke-width="1.2"/>
+          <text x="718" y="454" font-family="Inter, sans-serif" font-size="12.5" font-weight="700" fill="currentColor">Slack — Bench Bot</text>
+          <text x="718" y="474" font-family="Inter, sans-serif" font-size="10.5" fill="#7a7468">verdict · per-profile p99 · links · reaper alerts</text>
+
+          <!-- arrows -->
+          <!-- launch -->
+          <line x1="190" y1="120" x2="190" y2="198" stroke="#c14b27" stroke-width="1.4" marker-end="url(#arrA)"/>
+          <text x="200" y="150" font-family="Inter, sans-serif" font-size="11" fill="#9a3a1c">launch · user-data</text>
+          <text x="200" y="165" font-family="Inter, sans-serif" font-size="11" fill="#9a3a1c">· deadline tag</text>
+
+          <!-- packs to box -->
+          <line x1="390" y1="232" x2="302" y2="232" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
+          <text x="308" y="222" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">golden packs</text>
+          <!-- publish -->
+          <line x1="302" y1="282" x2="388" y2="282" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
+          <text x="306" y="299" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">publish bundle</text>
+
+          <!-- box to control -->
+          <line x1="170" y1="370" x2="170" y2="428" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
+          <text x="180" y="404" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">verdict + logs</text>
+
+          <!-- poll -->
+          <path d="M 350 120 L 350 461 L 304 461" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#arr)"/>
+          <text x="358" y="420" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">relay polls</text>
+          <text x="358" y="434" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">every 30 s</text>
+
+          <!-- ingest -->
+          <line x1="630" y1="255" x2="698" y2="255" stroke="#2a6f6b" stroke-width="1.4" marker-end="url(#arr)" style="color:#2a6f6b"/>
+          <text x="636" y="243" font-family="Inter, sans-serif" font-size="10.5" fill="#2a6f6b">ingest on pass</text>
+
+          <!-- notify -->
+          <path d="M 665 120 L 665 461 L 698 461" fill="none" stroke="currentColor" stroke-width="1.3" marker-end="url(#arr)"/>
+          <text x="673" y="420" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">Slack</text>
+          <text x="673" y="434" font-family="Inter, sans-serif" font-size="10.5" fill="#4a4a4a">verdict</text>
+        </svg>
+        <figcaption>
+          The whole machine on one screen. GitHub Actions is control, S3 is data, the box is compute, the
+          site is the record, Slack is the doorbell. The box holds no GitHub credential — it talks only to the
+          two buckets through its instance profile.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="journey">
+      <h2><span class="num">02</span>One campaign, dispatch to verdict</h2>
+
+      <p>
+        A campaign starts as a form. Ten inputs — the <code>workflow_dispatch</code> maximum — and the
+        first one does most of the work: picking a phase selects the close interval <em>and</em> the three
+        dataset profiles that belong to it. The operator chooses a box size and a <code>stellar-rpc</code>
+        ref; everything else has a sane default.
+      </p>
+
+      <div class="dispatchrow">
+        <div class="dispatch" role="img" aria-label="Recreation of the GitHub workflow dispatch form with its inputs">
+          <div class="dhead">Run workflow <span class="dbranch">Branch: main ▾</span></div>
+          <div class="dbody">
+            <label>Pacing phase (selects close_interval + the dataset profiles) <span class="req">*</span></label>
+            <div class="sel">1 <span class="car">▲▼</span></div>
+            <label>Which ingest benchmarks to run</label>
+            <div class="sel">both <span class="car">▲▼</span></div>
+            <label>Run the query suites after ingest</label>
+            <div class="sel">no <span class="car">▲▼</span></div>
+            <label>Repetitions per (dataset, chunk) cell</label>
+            <div class="sel">1</div>
+            <label>bench-ingest cold --workers (empty = the per-machine default)</label>
+            <div class="sel empty">&nbsp;</div>
+            <label>Box size: 2x = m6id.2xlarge, 8x = c6id.8xlarge</label>
+            <div class="sel">2x <span class="car">▲▼</span></div>
+            <label>stellar-rpc ref to benchmark (resolved on the box, not here)</label>
+            <div class="sel">feature/full-history</div>
+            <div class="runbtn">Run workflow</div>
+          </div>
+        </div>
+        <div class="dispatch-notes">
+          <p>
+            The <code>validate</code> job turns the form into a runner config:
+            <code>render-campaign-toml.sh</code> checks every enum, range, and ref, expands the phase into
+            a close interval plus three S3 dataset profiles, computes the campaign's time budget, and
+            rejects anything the 21-hour relay chain cannot carry.
+          </p>
+          <ul>
+            <li><strong>The ref is resolved on the box,</strong> not in CI — any branch, tag, or SHA of <code>stellar-rpc</code> can be benchmarked, including an open PR's head.</li>
+            <li><strong>Campaigns queue, never cancel:</strong> the <code>rpc-bench</code> concurrency group serializes runs so two campaigns never share an account's boxes or step on each other's measurements.</li>
+            <li>Three more inputs — <code>hot_num_ledgers</code>, <code>run_name</code>, <code>benchmarks_ref</code> — cover partial runs, naming, and pinning the harness itself.</li>
+          </ul>
+        </div>
+      </div>
+
+      <p>
+        From there the workflow runs the shape below — a real run from 2026-08-12. Two of the four relay
+        windows were enough; windows 3 and 4 were skipped, the box was terminated, and the team was
+        notified.
+      </p>
+
+      <div class="gh" role="img" aria-label="Recreation of a successful bench-campaign.yml GitHub Actions run with its job graph">
+        <div class="gh-head">
+          <div><span class="gh-kv">Triggered</span><span class="gh-v">Manually · marwen-abid · <span class="gh-branch">bench-automation/campaign… @ c5b5852</span></span></div>
+          <div><span class="gh-kv">Status</span><span class="gh-v ok">Success</span></div>
+          <div><span class="gh-kv">Total duration</span><span class="gh-v">13h 45m 7s</span></div>
+        </div>
+        <div class="gh-file">bench-campaign.yml <small>on: workflow_dispatch</small></div>
+        <div class="gh-graph">
+          <div class="gh-track">
+            <div class="gh-job"><span class="st ok">✓</span>Validate inputs + render campaign config<span class="dur">4s</span></div>
+            <div class="gh-link"></div>
+            <div class="gh-job"><span class="st ok">✓</span>Launch campaign box<span class="dur">37s</span></div>
+            <div class="gh-link"></div>
+            <div class="gh-job"><span class="st ok">✓</span>Await campaign (window 1/4)<span class="dur">5h 20m</span></div>
+            <div class="gh-link"></div>
+            <div class="gh-job"><span class="st ok">✓</span>Await campaign (window 2/4)<span class="dur">3h 12m</span></div>
+            <div class="gh-link"></div>
+            <div class="gh-job skip"><span class="st skip">⊘</span>window 3/4<span class="dur">0s</span></div>
+            <div class="gh-link"></div>
+            <div class="gh-job skip"><span class="st skip">⊘</span>window 4/4</div>
+            <div class="gh-link"></div>
+            <div class="gh-forkcol">
+              <div class="gh-job"><span class="st ok">✓</span>Terminate campaign box<span class="dur">5s</span></div>
+              <div class="gh-job"><span class="st ok">✓</span>Notify<span class="dur">23s</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="fine" style="margin-bottom:24px;">Recreated from the run's Actions page. Unused windows cost 0 seconds.</p>
+
+      <p>
+        Two tracks run in parallel: the workflow's jobs, and the box's own life. They meet only through S3.
+      </p>
+
+      <div class="spine">
+        <div class="trklabel">In GitHub Actions</div>
+        <div class="track">
+          <div class="node lit">validate<small>form → TOML</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">launch<small>seed <code style="background:transparent;padding:0">pending</code> · tag deadline</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">await ×4<small>poll result.json · 30 s</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">notify<small>Slack + site ingest</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node lit">terminate<small>unless left for rescue</small></div>
+        </div>
+        <div class="trklabel" style="margin-top:18px;">On the box, meanwhile</div>
+        <div class="track">
+          <div class="node alt">bootstrap<small>bootstrap-common.sh</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node alt">build<small>stellar-rpc @ ref</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node alt">fetch packs<small>S3 → NVMe, reused</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node alt">run legs<small>ingest cold · hot × 3 profiles</small></div>
+          <div class="arrow">&rarr;</div>
+          <div class="node alt">publish<small>bundle → S3 · verdict</small></div>
+        </div>
+      </div>
+      <div class="spine-legend">
+        <span>workflow jobs — bench-campaign.yml</span>
+        <span class="alt">box-side steps — run-campaign.sh driving the Go runner</span>
+      </div>
+
+      <div class="callout">
+        <span class="label">The trick: poll-relay</span>
+        <p>
+          A GitHub-hosted job dies at 6 hours; a campaign runs 5 to 17. So no job <em>runs</em> the
+          campaign — the box runs itself, and four chained <strong>await windows</strong> (5 h 20 m each,
+          ~21 h capacity) merely poll its <code>result.json</code> every 30 seconds, tailing the box log
+          over SSM as they go. A window that ends mid-campaign hands <code>running</code> to the next; a
+          verdict ends the chain. And the budget clock starts <em>after</em> the box launches — runner
+          queue time never eats campaign time.
+        </p>
+      </div>
+
+      <p>
+        Three small mechanisms make the loop trustworthy. <code>launch</code> seeds a
+        <code>pending</code> marker before the box exists, so a missing result is always distinguishable
+        from a broken IAM policy. Every result carries a <code>runId</code> of
+        <code>run_id-attempt</code>, so a re-run attempt rejects a stale verdict from its predecessor. And
+        the box, the workflow, and a reaper each hold a termination lever — budget, cleanup job, and a
+        <code>deadline</code> tag — so no failure mode leaves a forgotten box burning money.
+      </p>
+
+      <h3>The verdict arrives where the team lives</h3>
+
+      <p>
+        The <code>notify</code> job reads the run-info sidecar, renders a Block Kit message, and posts it.
+        On a pass it also ingests the bundle into the results site — it checks out
+        <code>stellar-rpc-benchmarks</code> and runs <code>ingest.sh --push-main</code>, so the Pages
+        explorer is already serving the run when the Slack message lands. "View results" links straight
+        into it.
+      </p>
+
+      <div class="slack" role="img" aria-label="Recreation of the Bench Bot Slack message for a passed campaign">
+        <div class="hd"><span class="ava">🤖</span><div><span class="who">Bench Bot</span><span class="app">APP</span><span class="ts">9:49 AM</span></div></div>
+        <div class="att good">
+          <div class="title">✅ Bench campaign passed — pr902-phase3-8x-12082026</div>
+          <p>The run finished green in <strong>5 h 13 m</strong> of a 7 h budget.</p>
+          <div class="fields">
+            <div class="f"><b>Phase</b><span>3</span></div>
+            <div class="f"><b>Machine</b><span>c6id.8xlarge · 32 workers</span></div>
+            <div class="f"><b>Benchmarked ref</b><span>tamirms/full-history-p99-campaign @ df1d98ac</span></div>
+            <div class="f"><b>Run id</b><span class="scode">pr902-phase3-8x-12082026-df1d98ac-20260812T224413Z</span></div>
+          </div>
+          <div class="btns"><span class="btn primary">View results</span><span class="btn">GitHub run</span><span class="btn">Bundle on S3</span></div>
+          <div class="sechead">Ingestion p99 vs the Phase 3 target (80 ms)</div>
+          <ul class="lights">
+            <li><span class="dot"></span>SAC transfers · 6,000 tx/ledger — <strong>37 ms</strong> (under target)</li>
+            <li><span class="dot"></span>Soroswap swaps · 1,800 tx/ledger — <strong>31 ms</strong> (under target)</li>
+            <li><span class="dot"></span>OZ token transfers · 3,600 tx/ledger — <strong>27 ms</strong> (under target)</li>
+          </ul>
+          <p class="em">median of 1 run · block time 600 ms</p>
+          <div class="fields">
+            <div class="f"><b>Ingest</b><span>hot</span></div>
+            <div class="f"><b>Query</b><span>no</span></div>
+          </div>
+          <div class="ctx">Ingested into the results site · harness c5b58522</div>
+        </div>
+      </div>
+      <p class="fine" style="margin-bottom:24px;">Recreated from the 2026-08-12 message. The per-profile p99 readout means nobody has to open a dashboard to know where they stand.</p>
+
+      <h3>When it fails, the box waits for you</h3>
+
+      <p>
+        A failing verdict does not tear the box down. <code>cleanup</code> sees the failure and leaves the
+        instance up for SSM rescue — results and logs are still on the NVMe — until its own
+        self-termination timer fires. If every in-band ceiling somehow fails, the reaper
+        (<code>bench-reaper.yml</code>, cron twice an hour) terminates any <code>rpc-bench</code> box past
+        its <code>deadline</code> tag and says so out loud.
+      </p>
+
+      <div class="slack" role="img" aria-label="Recreation of the Bench Bot Slack message for a failed campaign">
+        <div class="hd"><span class="ava">🤖</span><div><span class="who">Bench Bot</span><span class="app">APP</span><span class="ts">3:23 AM</span></div></div>
+        <div class="att bad">
+          <div class="title">❌ Bench campaign failed — pr902-phase1-8x</div>
+          <p><strong>Reason:</strong> the campaign reported a failing verdict, after 17 h 7 m of a 18 h 40 m budget.</p>
+          <div class="quote">== campaign summary: 1 failed, 0 skipped
+==   failed:  ingest-cold-soroswap-1500-c1-run1 (exit status 1)</div>
+          <div class="fields">
+            <div class="f"><b>Phase / Machine</b><span>1 · c6id.8xlarge</span></div>
+            <div class="f"><b>Benchmarked ref</b><span>tamirms/full-history-p99-campaign</span></div>
+            <div class="f"><b>Box</b><span><span class="scode">i-00d5d97b7421c0388</span> — left up for rescue</span></div>
+            <div class="f"><b>Run-id tag</b><span class="scode">31724787126</span></div>
+          </div>
+          <div class="btns"><span class="btn primary">GitHub run</span><span class="btn">Box log</span><span class="btn">Verdict on S3</span></div>
+          <div class="ctx">⚠️ The box stays up for debugging — terminate it by the run-id tag when done, or the reaper kills it at the deadline (11:55 UTC).</div>
+        </div>
+      </div>
+
+      <div class="slack" role="img" aria-label="Recreation of the Bench Bot Slack message from the reaper terminating a past-deadline box">
+        <div class="hd"><span class="ava">🤖</span><div><span class="who">Bench Bot</span><span class="app">APP</span><span class="ts">10:30 AM</span></div></div>
+        <div class="att warn">
+          <div class="title">⚠️ Reaper terminated 1 past-deadline box</div>
+          <ul class="plain">
+            <li><span class="scode">i-07a1c1898165ccc1e</span> — campaign run <a href="#">reaper-smoke-test</a>, deadline passed <strong>72 min</strong> ago</li>
+            <li><span class="scode">i-0b2e5102ad78982ad</span> has no deadline tag — left alone (hand-launched?)</li>
+          </ul>
+          <div class="btns"><span class="btn">Reaper run</span></div>
+          <div class="ctx">A reap means a campaign box outlived every in-band ceiling — worth a human look.</div>
+        </div>
+      </div>
+      <p class="fine">Both recreated from real Bench Bot messages. The reaper only touches boxes it can prove are expired; anything untagged is somebody's hand-launched box and stays alive.</p>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="actions">
+      <h2><span class="num">03</span>Prior art &amp; PR #921: what existed, what we added</h2>
+
+      <p>
+        None of the Actions layer started from zero. <strong>Christian Jonas</strong>
+        (<a href="https://github.com/cjonas9"><code>cjonas9</code></a>) built the <code>perf-eval</code>
+        architecture that runs release performance tests on ephemeral EC2, across five merged PRs:
+      </p>
+
+      <ul>
+        <li><a href="https://github.com/stellar/stellar-rpc/pull/741">#741</a> — the first EC2 ingestion load test: launch a box, download and verify datasets, run, report.</li>
+        <li><a href="https://github.com/stellar/stellar-rpc/pull/791">#791</a> — the generic scatter/gather architecture: <code>ec2-leg.yml</code>, the coordinator, <code>bootstrap-common.sh</code>, and the harness — the S3 result protocol and SSM debug tails that everything since builds on.</li>
+        <li><a href="https://github.com/stellar/stellar-rpc/pull/830">#830</a> — the database-backfill leg.</li>
+        <li><a href="https://github.com/stellar/stellar-rpc/pull/861">#861</a> — the Go-benchmark leg with <code>benchstat</code> comparison.</li>
+        <li><a href="https://github.com/stellar/stellar-rpc/pull/855">#855</a> — the endpoint/blaster leg with chained boxes.</li>
+      </ul>
+
+      <p>
+        PR <a href="https://github.com/stellar/stellar-rpc/pull/921">#921</a> (+1,897 lines) stands on that
+        foundation and reshapes it for a different problem: the perf-eval legs are short-lived,
+        release-driven, and report to a PR comment; a benchmark campaign is operator-dispatched, runs up to
+        17 hours, and reports to the team. Piece by piece:
+      </p>
+
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:26%">Piece</th><th style="width:36%">Christian's perf-eval</th><th>PR #921</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Box bootstrap</td>
+            <td><code>bootstrap-common.sh</code> — logging, result upload, self-shutdown, failure handling</td>
+            <td><span class="chip good">reused as-is</span> plus an Ubuntu 24.04 AWS-CLI fix</td>
+          </tr>
+          <tr>
+            <td>S3 result protocol</td>
+            <td><code>harness/s3.go</code> — <code>result.json</code> with <code>verdict: ok|fail</code></td>
+            <td><span class="chip good">reused</span> plus the seeded <code>pending</code> state</td>
+          </tr>
+          <tr>
+            <td>SSM machinery</td>
+            <td>Command runner + box-log tails in <code>gather.go</code></td>
+            <td><span class="chip good">reused</span> — the relay tails logs through it every ten polls</td>
+          </tr>
+          <tr>
+            <td>EC2 launch pattern</td>
+            <td><code>ec2-leg.yml</code> — OIDC, user-data assembly, tagging, SSM registration</td>
+            <td><span class="chip accent">adapted</span> into a dedicated workflow — one reusable-workflow job cannot span a 10 h+ campaign</td>
+          </tr>
+          <tr>
+            <td>Waiting for the box</td>
+            <td><code>Gather</code> — one window, timeout = failure</td>
+            <td><span class="chip accent">replaced</span> by <code>relay.go</code> — windows hand off <code>running</code>; only the campaign deadline fails</td>
+          </tr>
+          <tr>
+            <td>Reporting</td>
+            <td>Sticky PR comment via the coordinator</td>
+            <td><span class="chip accent">replaced</span> by Slack Block Kit (<code>slack-payload.sh</code>) + job summaries</td>
+          </tr>
+          <tr>
+            <td>Cleanup</td>
+            <td>Self-termination on the box</td>
+            <td><span class="chip accent">extended</span> — rescue-on-failure, then self-terminate, then <code>bench-reaper.yml</code> as the last line</td>
+          </tr>
+          <tr>
+            <td>Campaign config</td>
+            <td>—</td>
+            <td><span class="chip teal">new</span> — <code>render-campaign-toml.sh</code> turns ten validated inputs into a runner TOML</td>
+          </tr>
+          <tr>
+            <td>Box-side driver</td>
+            <td>Per-leg <code>run-*.sh</code> scripts</td>
+            <td><span class="chip teal">new</span> — <code>run-campaign.sh</code> bootstraps the benchmarks-repo runner at <code>benchmarks_ref</code> and drives the whole campaign</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <p>
+        One merge-order detail: GitHub only lists a <code>workflow_dispatch</code> form for workflows on
+        the default branch, and #921 targets <code>feature/full-history</code>. PR
+        <a href="https://github.com/stellar/stellar-rpc/pull/922">#922</a> (merged 2026-08-06) planted a
+        registration stub on <code>main</code> so the dispatch button exists today; dispatching picks the
+        real branch.
+      </p>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="method">
+      <h2><span class="num">04</span>The methodology</h2>
+
+      <p>
+        The numbers mean something because every run answers the same question the same way: the same bytes
+        in, the same pacing, the same targets, the same verdict rule. Four decisions carry that.
+      </p>
+
+      <h3>1 · Frozen inputs: the golden packs</h3>
+      <p>
+        We generated six synthetic ledger datasets once, with <code>stellar-core apply-load</code> at exact
+        transactions-per-ledger, and froze them into byte-stable "golden packs" on S3
+        (<a href="https://github.com/stellar/stellar-rpc/issues/867">#867</a>). Three workload profiles,
+        each stressing a different bottleneck — <strong>SAC transfers</strong> (every transfer mints a
+        fresh, sha256-derived balance entry: relentless state growth), <strong>OZ token transfers</strong>
+        (contract-token logic), and <strong>Soroswap swaps</strong> (multi-contract calls, heavy events) —
+        at two load points each, 16–50 GB per pack. A campaign ingests identical bytes every time, so two
+        runs differ only by code and hardware.
+      </p>
+
+      <h3>2 · The phase matrix</h3>
+      <p>
+        A <em>phase</em> is a network operating point: a block time plus a per-profile load. Picking a
+        phase in the dispatch form pins all of it.
+      </p>
+
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th></th><th class="num">Phase 1</th><th class="num">Phase 2</th><th class="num">Phase 3</th></tr></thead>
+        <tbody>
+          <tr><td>Block time (= hot pacing)</td><td class="num">2 s</td><td class="num">1 s</td><td class="num">600 ms</td></tr>
+          <tr><td>Ledger closes before read (N)</td><td class="num">2</td><td class="num">2</td><td class="num">3</td></tr>
+          <tr><td>SAC transfers — tx/ledger</td><td class="num">6,000</td><td class="num">5,000</td><td class="num">6,000</td></tr>
+          <tr><td>OZ token — tx/ledger</td><td class="num">4,000</td><td class="num">4,000</td><td class="num">3,600</td></tr>
+          <tr><td>Soroswap — tx/ledger</td><td class="num">1,500</td><td class="num">1,500</td><td class="num">1,800</td></tr>
+          <tr><td>Peak throughput (SAC)</td><td class="num">3,000 tps</td><td class="num">5,000 tps</td><td class="num">10,000 tps</td></tr>
+          <tr><td><strong>Ingest p99 target</strong></td><td class="num"><strong>900 ms</strong></td><td class="num"><strong>~400 ms</strong> (derived)</td><td class="num"><strong>100 → 80 ms</strong>*</td></tr>
+          <tr><td><strong>E2E budget</strong></td><td class="num"><strong>5 s</strong></td><td class="num"><strong>2.5 s</strong></td><td class="num"><strong>2 s</strong></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="fine">
+        * Targets live in one machine-readable place — <code>docs/targets.json</code> in the benchmarks
+        repo — read by the converter, the viewer, and the Slack verdict alike. The Phase 3 ingest target
+        moved 100 → 80 ms with the read-to-client amendment; the slice accounting is being reworked again
+        in <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/34">bench#34</a>.
+      </p>
+
+      <h3>3 · Two legs, two questions</h3>
+      <p>
+        Each campaign runs the ingest bench in two modes per profile. <strong>Cold</strong> is unpaced:
+        ingest a 10,000-ledger chunk flat out — <em>how fast can this box backfill?</em>
+        <strong>Hot</strong> is paced at the phase's block time: one ledger per close interval —
+        <em>can this box keep up with the network, and at what p99 commit latency?</em> The hot leg is the
+        one judged against the ingest target; its <code>pace_lag</code> distribution shows how far behind
+        the tip the box ever fell. Both run on the two hardware classes we care about: the published
+        minimum spec (<code>m6id.2xlarge</code> — 8 vCPU, 32 GiB, NVMe) and a headroom box
+        (<code>c6id.8xlarge</code> — 32 vCPU, 64 GiB).
+      </p>
+
+      <h3>4 · One E2E model, honestly labeled</h3>
+      <p>
+        "End to end" is a defined sum, not a vibe. Each phase's budget decomposes into four slices, and
+        every published figure says which slices are measured and which are still estimates.
+      </p>
+
+      <figure>
+        <svg viewBox="0 0 880 130" role="img" aria-label="The E2E latency model: block time times N, plus transaction submission, plus ingest, plus read-to-client, equals the phase budget." style="color: var(--ink);">
+          <g font-family="Inter, sans-serif">
+            <rect x="10" y="20" width="330" height="52" rx="6" fill="#f1ece2" stroke="#d8d2c4"/>
+            <text x="175" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">block time × N</text>
+            <text x="175" y="60" text-anchor="middle" font-size="11" fill="#7a7468">consensus · Core-owned constant</text>
+
+            <rect x="348" y="20" width="130" height="52" rx="6" fill="#e0eeec" stroke="#2a6f6b"/>
+            <text x="413" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#2a6f6b">tx submission</text>
+            <text x="413" y="60" text-anchor="middle" font-size="11" fill="#2a6f6b">p99 60 ms · measured #869</text>
+
+            <rect x="486" y="20" width="250" height="52" rx="6" fill="#f3e7e0" stroke="#c14b27" stroke-width="1.6"/>
+            <text x="611" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#9a3a1c">ingest</text>
+            <text x="611" y="60" text-anchor="middle" font-size="11" fill="#9a3a1c">measured — every campaign, per profile</text>
+
+            <rect x="744" y="20" width="126" height="52" rx="6" fill="#f1ece2" stroke="#d8d2c4" stroke-dasharray="5 4"/>
+            <text x="807" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">read-to-client</text>
+            <text x="807" y="60" text-anchor="middle" font-size="11" fill="#7a7468">p99 40 ms · estimate</text>
+
+            <text x="10" y="105" font-size="12.5" fill="#4a4a4a">= the phase E2E budget · 5 s / 2.5 s / 2 s — widths not to scale</text>
+            <text x="870" y="105" text-anchor="end" font-size="11.5" fill="#7a7468">dashed = fixed estimate until #856 / #870 land</text>
+          </g>
+        </svg>
+        <figcaption>
+          E2E = block×N + tx&nbsp;submission + ingest + read-to-client. The slices sum to the budget
+          exactly — zero slack. The campaigns measure the accent slice; #869 measured submission at
+          p99&nbsp;≤&nbsp;60&nbsp;ms; the read slice stays a declared estimate until the query benchmarks
+          (#856, #870) run.
+        </figcaption>
+      </figure>
+
+      <h3>What the machine has already told us</h3>
+
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:22%">Campaign</th><th style="width:22%">Verdict</th><th>Binding numbers (worst hot-ingest p99 vs target)</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Phase 1 · both boxes</td>
+            <td><span class="chip good">pass</span></td>
+            <td>469 ms (8x) · 803 ms (min) vs 900 ms — the published minimum spec holds at 2 s blocks</td>
+          </tr>
+          <tr>
+            <td>Phase 2 · both boxes</td>
+            <td><span class="chip warn">SAC misses</span></td>
+            <td>SAC 456 ms (8x) · 604 ms (min) vs ~400 ms; OZ and Soroswap pass</td>
+          </tr>
+          <tr>
+            <td>Phase 3 · baseline</td>
+            <td><span class="chip bad">all miss</span></td>
+            <td>min box 858 / 192 / 149 ms; 8x 749 / 141 / 112 ms vs 100 ms</td>
+          </tr>
+          <tr>
+            <td>Phase 3 · <a href="https://github.com/stellar/stellar-rpc/pull/902">#902</a> branch</td>
+            <td><span class="chip good">all pass</span></td>
+            <td>SAC 37 · Soroswap 31 · OZ 27 ms vs 80 ms — the 2026-08-12 automated run</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <p>
+        SAC is the binding profile at every phase — its fresh-address-per-transfer pattern grows Core's
+        in-memory Soroban state without bound, and the apply-stage tail owns most of every miss. The
+        machine did its job twice over: it isolated the bottleneck, and three weeks later the same
+        pipeline validated <a href="https://github.com/stellar/stellar-rpc/pull/902">#902</a>'s
+        hot-ingest optimizations — Phase 3 green on the 8x box. Finding the problem and proving the fix
+        ran through the same door.
+      </p>
+    </section>
+
+    <!-- =================================================== -->
+    <section id="trail">
+      <h2><span class="num">05</span>The paper trail</h2>
+
+      <p>
+        Everything above shipped as reviewable units across three repos (plus a PoC repo). The record, in
+        merge order.
+      </p>
+
+      <h3>stellar/stellar-rpc — issues</h3>
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:14%">Issue</th><th style="width:16%">State</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/771">#771</a></td><td><span class="chip good">closed 07-17</span></td><td>The bench harness: production-path <code>bench-ingest cold|hot</code> commands with CSV metrics.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/867">#867</a></td><td><span class="chip good">closed 07-21</span></td><td>The six synthetic datasets, frozen into golden packs for Phases 1–3.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/872">#872</a> <a href="https://github.com/stellar/stellar-rpc/issues/873">#873</a> <a href="https://github.com/stellar/stellar-rpc/issues/874">#874</a></td><td><span class="chip good">closed 07-24</span></td><td>The Phase 1 / 2 / 3 ingest campaigns on both hardware classes — the baseline numbers.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/871">#871</a></td><td><span class="chip good">closed 07-24</span></td><td>The results explorer — browsable, target-annotated reports for every run.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/869">#869</a></td><td><span class="chip good">closed 07-30</span></td><td>Tx-submission latency measured: in-RPC p99 ≤ 4.6 ms, V2 slice ≈ 55 ms vs the 60 ms estimate.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/866">#866</a></td><td><span class="chip good">closed 08-07</span></td><td>The infra: <code>stellar-rpc-bench</code> S3 bucket, IAM, and the benchmarking devbox pattern.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/896">#896</a></td><td><span class="chip good">closed 08-07</span></td><td>The config-driven Go campaign runner.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/issues/868">#868</a></td><td><span class="chip accent">open · in progress</span></td><td>The campaign automation — dispatch → EC2 → publish. Closes with PR #921.</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="fine">
+        Still open on the epic: <a href="https://github.com/stellar/stellar-rpc/issues/895">#895</a>
+        (full-history backfill — measured, write-up pending),
+        <a href="https://github.com/stellar/stellar-rpc/issues/856">#856</a> /
+        <a href="https://github.com/stellar/stellar-rpc/issues/870">#870</a> (query benchmarks, waiting on
+        the query code), <a href="https://github.com/stellar/stellar-rpc/issues/775">#775</a> (CI
+        regression gate, deprioritized), <a href="https://github.com/stellar/stellar-rpc/issues/800">#800</a>
+        (load-test findings, Tamir), and the PoCs
+        <a href="https://github.com/stellar/stellar-rpc/issues/905">#905</a> /
+        <a href="https://github.com/stellar/stellar-rpc/issues/906">#906</a>.
+      </p>
+
+      <h3>stellar/stellar-rpc — pull requests</h3>
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:14%">PR</th><th style="width:16%">State</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/pull/857">#857</a></td><td><span class="chip good">merged 07-17</span></td><td>The <code>bench-ingest</code> subcommands (closes #771) — layer 1.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/pull/892">#892</a></td><td><span class="chip">closed unmerged</span></td><td>The bash campaign runner. Ran the July campaigns, then was superseded by the Go runner in the benchmarks repo — deliberately.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/pull/922">#922</a></td><td><span class="chip good">merged 08-06</span></td><td>The dispatch registration stub on <code>main</code>.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/pull/921">#921</a></td><td><span class="chip accent">open</span></td><td><strong>This talk's centerpiece</strong> — <code>bench-campaign.yml</code>, <code>bench-reaper.yml</code>, the relay, and the campaign scripts. +1,897 lines.</td></tr>
+          <tr><td><a href="https://github.com/stellar/stellar-rpc/pull/902">#902</a></td><td><span class="chip accent">open · draft</span></td><td>The first customer: Tamir's hot-ingest optimization campaign, validated through this pipeline.</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h3>stellar/terraform</h3>
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:14%">PR</th><th style="width:16%">State</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/stellar/terraform/pull/6624">#6624</a></td><td><span class="chip good">merged 08-05</span></td><td>The <code>stellar-rpc-bench</code> S3 bucket and the CI role's least-privilege access.</td></tr>
+          <tr><td><a href="https://github.com/stellar/terraform/pull/6679">#6679</a></td><td><span class="chip good">merged 08-11</span></td><td>A 10 TB gp3 volume on the devbox for the full-history backfill benchmark (#895).</td></tr>
+        </tbody>
+      </table>
+      </div>
+
+      <h3>stellar-experimental/stellar-rpc-benchmarks</h3>
+      <p>
+        Thirty-plus merged PRs; grouped by what they built.
+      </p>
+      <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:24%">Theme</th><th style="width:34%">PRs</th><th>What they built</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Go campaign runner</td>
+            <td><a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/19">#19</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/21">#21</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/22">#22</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/23">#23</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/24">#24</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/25">#25</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/26">#26</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/27">#27</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/29">#29</a></td>
+            <td>The <code>campaign</code> CLI: config, deterministic plans, the executor with resume + <code>leg.json</code> sentinels, bundle provenance, publish/preflight, S3 packs, unattended bootstrap.</td>
+          </tr>
+          <tr>
+            <td>Converter &amp; ingest</td>
+            <td><a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/4">#4</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/17">#17</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/18">#18</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/20">#20</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/32">#32</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/33">#33</a></td>
+            <td>The bundle → run-JSON contract, tests on every PR, one ingest path for laptop and CI, and straight-to-main ingestion with S3 provenance — what lets the workflow publish the site.</td>
+          </tr>
+          <tr>
+            <td>Explorer &amp; reports</td>
+            <td><a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/1">#1</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/2">#2</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/3">#3</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/7">#7</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/8">#8</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/9">#9</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/30">#30</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/31">#31</a></td>
+            <td>From the first hot-ingestion view to phase-matched targets, RSS + pacing, PR previews, and a faceted run index with per-run verdicts.</td>
+          </tr>
+          <tr>
+            <td>E2E model</td>
+            <td><a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/13">#13</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/15">#15</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/34">#34</a></td>
+            <td>The E2E budget view, the tx-submission page, and the network-constants rework of the latency model.</td>
+          </tr>
+          <tr>
+            <td>Published runs</td>
+            <td><a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/6">#6</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/10">#10</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/11">#11</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/12">#12</a> <a href="https://github.com/stellar-experimental/stellar-rpc-benchmarks/pull/14">#14</a></td>
+            <td>The five July phase-campaign result sets, landed by hand — the runs that motivated automating the door they came through.</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <div class="foot">
+      <p>
+        Everything here traces to the epic tracker, <code>playbooks/</code>, <code>pod-docs/O3.1 metrics</code>,
+        and the repos' own docs. The GitHub-run and Slack figures are HTML recreations of real screenshots
+        from the August 2026 campaigns. Live results:
+        <a href="https://stellar-experimental.github.io/stellar-rpc-benchmarks/">stellar-experimental.github.io/stellar-rpc-benchmarks</a>
+        · epic: <a href="https://github.com/stellar/stellar-rpc/issues/898">stellar-rpc#898</a>.
+      </p>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
