@@ -511,7 +511,7 @@
     <ol>
       <li><a href="#arch">The architecture</a></li>
       <li><a href="#journey">One campaign, end to end</a></li>
-      <li><a href="#actions">Prior art &amp; PR #921</a></li>
+      <li><a href="#actions">What existed, what we added</a></li>
     </ol>
     <div class="grouplabel">The numbers</div>
     <ol class="c2">
@@ -848,16 +848,15 @@
         <span class="label">The trick: poll-relay</span>
         <p>
           A GitHub-hosted job dies at 6 hours; a campaign runs 5 to 17. So no job <em>runs</em> the
-          campaign — the box runs itself, and four chained <strong>await windows</strong> (5 h 20 m each,
-          ~21 h capacity) merely poll its <code>result.json</code> every 30 seconds, tailing the box log
+          campaign. Instead the box runs itself, and four chained <strong>await windows</strong> (5 h 20 m each,
+          ~21 h capacity) poll its <code>result.json</code> every 30 seconds, tailing the box log
           over SSM as they go. A window that ends mid-campaign hands <code>running</code> to the next; a
-          verdict ends the chain. And the budget clock starts <em>after</em> the box launches — runner
-          queue time never eats campaign time.
+          final state ends the chain. 
         </p>
       </div>
 
       <p>
-        Three small mechanisms make the loop trustworthy. <code>launch</code> seeds a
+        Three mechanisms make the loop trustworthy. <code>launch</code> seeds a
         <code>pending</code> marker before the box exists, so a missing result is always distinguishable
         from a broken IAM policy. Every result carries a <code>runId</code> of
         <code>run_id-attempt</code>, so a re-run attempt rejects a stale verdict from its predecessor. And
@@ -865,13 +864,12 @@
         <code>deadline</code> tag — so no failure mode leaves a forgotten box burning money.
       </p>
 
-      <h3>The verdict arrives where the team lives</h3>
+      <h3>The verdict is finally sent to Slack</h3>
 
       <p>
-        The <code>notify</code> job reads the run-info sidecar, renders a Block Kit message, and posts it.
-        On a pass it also ingests the bundle into the results site — it checks out
-        <code>stellar-rpc-benchmarks</code> and runs <code>ingest.sh --push-main</code>, so the Pages
-        explorer is already serving the run when the Slack message lands. "View results" links straight
+        The <code>notify</code> job reads the run-info sidecar, renders the slack message, and posts it to the <code>#rpc-bench-alerts</code> channel.
+        It also ingests the bundle into the results site: it runs <code>ingest.sh --push-main</code> on
+        <code>stellar-rpc-benchmarks</code>, so the Results explorer is already serving the run when the Slack message lands. "View results" links straight
         into it.
       </p>
 
@@ -948,11 +946,17 @@
 
     <!-- =================================================== -->
     <section id="actions">
-      <h2><span class="num">03</span>Prior art &amp; PR #921: what existed, what we added</h2>
+      <h2><span class="num">03</span>What existed, what we added</h2>
 
       <p>
-        None of the Actions layer started from zero. <strong>Christian Jonas</strong>
-        (<a href="https://github.com/cjonas9"><code>cjonas9</code></a>) built the <code>perf-eval</code>
+        Of the four layers in <a href="#arch">the architecture</a>, three are entirely new with this
+        epic: the bench subcommands (layer 1), the campaign runner (layer 2), and the results site (the
+        report layer). Layer 3 — the campaign automation — is the one place we did not start from zero:
+        it was already partially implemented.
+      </p>
+
+      <p>
+        <a href="https://github.com/cjonas9"><code>cjonas9</code></a> built the <code>perf-eval</code>
         architecture that runs release performance tests on ephemeral EC2, across five merged PRs:
       </p>
 
@@ -1023,14 +1027,6 @@
         </tbody>
       </table>
       </div>
-
-      <p>
-        One merge-order detail: GitHub only lists a <code>workflow_dispatch</code> form for workflows on
-        the default branch, and #921 targets <code>feature/full-history</code>. PR
-        <a href="https://github.com/stellar/stellar-rpc/pull/922">#922</a> (merged 2026-08-06) planted a
-        registration stub on <code>main</code> so the dispatch button exists today; dispatching picks the
-        real branch.
-      </p>
     </section>
 
     <!-- =================================================== -->
