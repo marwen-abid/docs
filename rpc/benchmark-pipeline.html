@@ -1071,54 +1071,16 @@
       </table>
       </div>
 
-      <h3>3 · Two legs, two questions</h3>
+      <h3>3 · E2E model</h3>
       <p>
-        Each campaign runs the ingest bench in two modes per profile. <strong>Cold</strong> is unpaced:
-        ingest a 10,000-ledger chunk flat out — <em>how fast can this box backfill?</em>
-        <strong>Hot</strong> is paced at the phase's block time: one ledger per close interval —
-        <em>can this box keep up with the network, and at what p99 commit latency?</em> The hot leg is the
-        one judged against the ingest target; its <code>pace_lag</code> distribution shows how far behind
-        the tip the box ever fell. Both run on the two hardware classes we care about: the published
-        minimum spec (<code>m6id.2xlarge</code> — 8 vCPU, 32 GiB, NVMe) and a headroom box
-        (<code>c6id.8xlarge</code> — 32 vCPU, 64 GiB).
+        The ingest slice the campaigns measure sits inside a larger end-to-end budget — network round
+        trips, <code>sendTransaction</code>, block time × N, ingestion, <code>getTransaction</code> —
+        with every slice labeled as measured, estimated, or assumed. The authoritative, interactive
+        description lives on the results site:
+        <a href="https://stellar-experimental.github.io/stellar-rpc-benchmarks/latency-model.html">the
+        E2E latency model</a>. This page deliberately does not duplicate it — the model evolves as more
+        slices get measured, and that page is where it stays current.
       </p>
-
-      <h3>4 · One E2E model, honestly labeled</h3>
-      <p>
-        "End to end" is a defined sum, not a vibe. Each phase's budget decomposes into four slices, and
-        every published figure says which slices are measured and which are still estimates.
-      </p>
-
-      <figure>
-        <svg viewBox="0 0 880 130" role="img" aria-label="The E2E latency model: block time times N, plus transaction submission, plus ingest, plus read-to-client, equals the phase budget." style="color: var(--ink);">
-          <g font-family="Inter, sans-serif">
-            <rect x="10" y="20" width="330" height="52" rx="6" fill="#f1ece2" stroke="#d8d2c4"/>
-            <text x="175" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">block time × N</text>
-            <text x="175" y="60" text-anchor="middle" font-size="11" fill="#7a7468">consensus · Core-owned constant</text>
-
-            <rect x="348" y="20" width="130" height="52" rx="6" fill="#e0eeec" stroke="#2a6f6b"/>
-            <text x="413" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#2a6f6b">tx submission</text>
-            <text x="413" y="60" text-anchor="middle" font-size="11" fill="#2a6f6b">p99 60 ms · #869</text>
-
-            <rect x="486" y="20" width="250" height="52" rx="6" fill="#f3e7e0" stroke="#c14b27" stroke-width="1.6"/>
-            <text x="611" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="#9a3a1c">ingest</text>
-            <text x="611" y="60" text-anchor="middle" font-size="11" fill="#9a3a1c">measured — every campaign, per profile</text>
-
-            <rect x="744" y="20" width="126" height="52" rx="6" fill="#f1ece2" stroke="#d8d2c4" stroke-dasharray="5 4"/>
-            <text x="807" y="42" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">read-to-client</text>
-            <text x="807" y="60" text-anchor="middle" font-size="11" fill="#7a7468">p99 40 ms · estimate</text>
-
-            <text x="10" y="105" font-size="12.5" fill="#4a4a4a">= the phase E2E budget · 5 s / 2.5 s / 2 s — widths not to scale</text>
-            <text x="870" y="105" text-anchor="end" font-size="11.5" fill="#7a7468">dashed = fixed estimate until #856 / #870 land</text>
-          </g>
-        </svg>
-        <figcaption>
-          E2E = block×N + tx&nbsp;submission + ingest + read-to-client. The slices sum to the budget
-          exactly — zero slack. The campaigns measure the accent slice; #869 measured submission at
-          p99&nbsp;≤&nbsp;60&nbsp;ms; the read slice stays a declared estimate until the query benchmarks
-          (#856, #870) run.
-        </figcaption>
-      </figure>
 
       <h3>What the pipeline has already told us</h3>
 
