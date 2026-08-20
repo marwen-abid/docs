@@ -133,13 +133,27 @@
   .meta-pair { display: flex; gap: 6px; align-items: baseline; }
 
   /* ---- KPI strip ---- */
+  .kpi-kicker {
+    font-family: "Inter", sans-serif;
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin: 0 0 10px;
+  }
   .kpis {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto auto auto;
     gap: 0 26px;
     margin: 0 0 8px;
   }
-  .kpi { border-top: 2px solid var(--ink); padding-top: 10px; }
+  .kpi {
+    border-top: 2px solid var(--ink);
+    padding-top: 10px;
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    align-content: start;
+  }
   .kpi .label {
     font-family: "Inter", sans-serif;
     font-size: 11px;
@@ -433,17 +447,18 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 820px;
+    min-width: 640px;
     font-family: "Inter", sans-serif;
     font-size: 12.5px;
   }
   th, td {
-    padding: 9px 12px;
+    padding: 9px 10px;
     border-bottom: 1px solid var(--rule-soft);
     text-align: right;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
+  td:first-child, td:nth-child(2) { white-space: normal; }
   th {
     border-bottom: 1px solid var(--ink);
     background: var(--bg-tint);
@@ -513,7 +528,8 @@
   @media (max-width: 920px) {
     .layout { grid-template-columns: 1fr; gap: 24px; padding: 32px 20px 80px; }
     nav.toc { position: static; border-left: 0; padding-left: 0; max-height: none; }
-    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 26px; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpi { margin-bottom: 20px; }
     .architecture, .bars, .closeout { grid-template-columns: 1fr; }
     .test-grid { grid-template-columns: 1fr; }
     .model { grid-template-columns: 1fr; }
@@ -568,26 +584,27 @@
         <div class="meta-pair"><dt>Transport gate</dt><dd>p99 &le; 4 ms</dd></div>
       </dl>
 
+      <p class="kpi-kicker">Final setup for the PoC: real Core, chunked and compressed (zstd), 14.48 MiB ledgers</p>
       <div class="kpis">
         <article class="kpi">
-          <div class="label">Real Core, compressed</div>
+          <div class="label">Delivery p50</div>
           <div class="value good-ink">1.56 ms</div>
-          <div class="note">delivery p50; 10.5&times; below its uncompressed pair</div>
+          <div class="note">typical ledger-to-RPC delivery</div>
         </article>
         <article class="kpi">
-          <div class="label">Real Core tail</div>
+          <div class="label">Delivery p99</div>
           <div class="value good-ink">3.99 ms</div>
-          <div class="note">p99 = max at n=98; under the 4 ms target</div>
+          <div class="note">worst of 98 ledgers; under the 4 ms gate</div>
         </article>
         <article class="kpi">
-          <div class="label">Controlled gate</div>
+          <div class="label">Controlled p99</div>
           <div class="value teal-ink">0.421 ms</div>
-          <div class="note">p99 across 1,000 warmup-excluded ledgers</div>
+          <div class="note">repeatable gate run, 1,000 ledgers</div>
         </article>
         <article class="kpi">
-          <div class="label">Proven EC2 limit</div>
+          <div class="label">Single-flow limit</div>
           <div class="value warn-ink">4.96 Gbit/s</div>
-          <div class="note">one TCP flow; four flows reached 12.26 Gbit/s</div>
+          <div class="note">the EC2 TCP ceiling; hidden by compression</div>
         </article>
       </div>
     </section>
@@ -596,9 +613,9 @@
     <section id="arch">
       <h2><span class="num">01</span>Architecture under test</h2>
       <p class="sectionnote">
-        The client implements the existing <code>ledgerbackend.LedgerStream</code>
-        seam. RPC ingest does not need a new ledger-consumption interface.
-      </p>
+        The PoC client plugs into the same interface RPC ingestion already uses to read ledgers (<code>ledgerbackend.LedgerStream</code>). 
+        Swapping the local Core for the remote stream needs no change to RPC's ingestion code.
+    </p>
 
       <div class="architecture">
         <article class="card">
@@ -678,8 +695,8 @@
           <h3>Heavy SAC-6000 replay</h3>
           <div class="metric">14.49 MiB mean · n=1,001</div>
           <div class="number">19.89 ms p99</div>
-          <p class="detail">The real XDR was 5&times; larger than the first synthetic load leg. Latency scaled with bytes, not queue depth.</p>
-          <span class="chip good">GO: 25% OF BUDGET</span>
+          <p class="detail">The synthetic ledgers were 5&times; larger than the first load leg.</p>
+          <span class="chip warn">4 MS GATE MISSED</span>
         </article>
 
         <article class="card step">
@@ -706,39 +723,42 @@
     <section id="latency">
       <h2><span class="num">03</span>Latency progression</h2>
       <p class="sectionnote">
-        Separate scales preserve the metric change. The final chart uses the metric defined
-        for the chunked transport gate.
+        Runs 1&ndash;2 kept the transport fixed and changed the ledgers &mdash; bigger and heavier
+        each time. Runs 3&ndash;4 kept the heaviest ledger fixed and changed the transport &mdash;
+        chunking, then compression. The two pairs also measure delivery differently, so each
+        gets its own chart; do not compare bars across the two. The right chart uses the
+        metric the 4 ms gate is judged against.
       </p>
 
       <div class="bars">
         <article class="card">
-          <div class="bar-group-title">Original delivery metric</div>
-          <div class="bar-group-subtitle">Server post-materialization stamp to client receive</div>
+          <div class="bar-group-title">Runs 1&ndash;2 &mdash; bigger ledgers, same transport</div>
+          <div class="bar-group-subtitle">Store-and-forward for all three rows; measured from the server's send stamp to client receive</div>
 
           <div class="bar-row">
-            <span>Real pubnet</span>
-            <div class="track"><div class="fill" style="width:22.8%"></div></div>
+            <span>Real pubnet, 2.13 MiB</span>
+            <div class="track"><div class="fill pass" style="width:22.8%"></div></div>
             <span class="bar-value">4.54</span>
           </div>
           <div class="bar-row">
-            <span>2.93 MiB synthetic</span>
-            <div class="track"><div class="fill" style="width:18.3%"></div></div>
+            <span>Synthetic, 2.93 MiB</span>
+            <div class="track"><div class="fill pass" style="width:18.3%"></div></div>
             <span class="bar-value">3.64</span>
           </div>
           <div class="bar-row">
-            <span>14.49 MiB replay</span>
+            <span>Synthetic, 14.49 MiB</span>
             <div class="track"><div class="fill warn" style="width:100%"></div></div>
             <span class="bar-value">19.89</span>
           </div>
-          <p class="footnote">Bars show delivery p99 in milliseconds; local-pipe wall time and throughput were also measured.</p>
+          <p class="footnote">Bars show p99 delivery time in milliseconds.</p>
         </article>
 
         <article class="card">
-          <div class="bar-group-title">Post-emission delivery metric</div>
-          <div class="bar-group-subtitle">Client assembled + verified minus source emitEnd</div>
+          <div class="bar-group-title">Runs 3&ndash;4 &mdash; same ledger, better transport</div>
+          <div class="bar-group-subtitle">14.48 MiB ledgers for all four rows; measured from Core's last emitted byte to assembled and verified on the client</div>
 
           <div class="bar-row">
-            <span>Store-forward baseline</span>
+            <span>Store-and-forward baseline</span>
             <div class="track"><div class="fill warn" style="width:100%"></div></div>
             <span class="bar-value">31.18</span>
           </div>
@@ -748,16 +768,16 @@
             <span class="bar-value">18.56</span>
           </div>
           <div class="bar-row">
-            <span>Real Core, compressed</span>
+            <span>Real Core, chunked + zstd</span>
             <div class="track"><div class="fill pass" style="width:12.8%"></div></div>
             <span class="bar-value">3.99</span>
           </div>
           <div class="bar-row">
-            <span>Controlled, compressed</span>
+            <span>Controlled, chunked + zstd</span>
             <div class="track"><div class="fill pass" style="width:1.35%"></div></div>
             <span class="bar-value">0.421</span>
           </div>
-          <p class="footnote">Bars show delivery p99 in milliseconds. The 4 ms gate applies to the controlled compressed cell.</p>
+          <p class="footnote">Bars show p99 delivery time in milliseconds. The 4 ms gate applies to the last row, the controlled run.</p>
         </article>
       </div>
     </section>
@@ -765,16 +785,23 @@
     <!-- =================================================== -->
     <section id="model">
       <h2><span class="num">04</span>Why compression closed the gap</h2>
-      <p class="sectionnote">Measured Core emission window: 7.28 ms p50 in Run 3.</p>
+      <p class="sectionnote">
+        Core does not hand over a ledger in one piece &mdash; it streams it out over roughly
+        7.5 ms (measured: 7.28 ms median in Run 3). Because the stream is chunked, the network
+        can already send chunks while Core is still producing them. Sending done during those
+        7.5 ms is free. What hurts is whatever is still left to send after Core finishes &mdash;
+        that is the time the client sits waiting.
+      </p>
 
       <div class="model">
         <article class="model-card">
           <h3>Uncompressed</h3>
-          <p class="hint">One WebSocket = one TCP flow outside a placement group.</p>
-          <div class="equation">14.48 MiB / 4.96 Gbit/s<br>= 24.3 ms wire</div>
+          <p class="hint">One WebSocket is one TCP connection, and EC2 caps a single connection between these hosts at about 5 Gbit/s.</p>
+          <div class="equation">14.48 MiB at 4.96 Gbit/s<br>= 24.3 ms to send</div>
           <div class="result">
-            24.3 ms wire &minus; 7.5 ms overlap = <strong class="warn-ink">16.8 ms tail</strong><br>
-            Measured controlled p50: 16.60 ms
+            Only 7.5 ms of that hides behind Core's own emission.
+            <strong class="warn-ink">About 16.8 ms of sending is left after Core finishes.</strong><br>
+            Measured: 16.60 ms (controlled p50) &mdash; the model matches.
           </div>
         </article>
 
@@ -782,11 +809,12 @@
 
         <article class="model-card">
           <h3>Per-chunk zstd</h3>
-          <p class="hint">SAC-6000 XDR compressed about 7.1&times; in the measured corpus.</p>
-          <div class="equation">~2.0 MiB / 4.96 Gbit/s<br>= ~3.2 ms wire</div>
+          <p class="hint">zstd shrinks the SAC-6000 ledgers about 7&times; before they go on the network.</p>
+          <div class="equation">~2.0 MiB at 4.96 Gbit/s<br>= ~3.2 ms to send</div>
           <div class="result">
-            3.2 ms wire &lt; 7.5 ms emission = <strong class="good-ink">transfer mostly hidden</strong><br>
-            Measured Real-Core p50: 1.56 ms
+            3.2 ms of sending fits inside the 7.5 ms Core spends emitting.
+            <strong class="good-ink">The network keeps up in real time; almost nothing is left at the end.</strong><br>
+            Measured: 1.56 ms (Real-Core p50).
           </div>
         </article>
       </div>
@@ -795,28 +823,32 @@
     <!-- =================================================== -->
     <section id="tests">
       <h2><span class="num">05</span>What each test answered</h2>
-      <p class="sectionnote">Descriptive names replace the runbook's P1/P2 labels.</p>
+      <p class="sectionnote">
+        Three kinds of test back the numbers: a controlled synthetic stream for repeatable
+        measurements, a real Core process for realism, and control checks that rule out
+        measurement error.
+      </p>
 
       <div class="test-grid">
         <article class="card test-card">
           <span class="tag">Controlled transport gate</span>
           <h3>Repeatable tail measurement</h3>
-          <p><strong>1,000 ledgers</strong>, 14.48 MiB, about 7&times; compression, 600 ms cadence and an approximately 8 ms emit window.</p>
-          <p>Purpose: isolate transport behavior and produce a stable p99.</p>
+          <p><strong>1,000 synthetic ledgers</strong>, 14.48 MiB each, one every 600 ms, emitted over about 8 ms &mdash; the same size and rhythm as the real Core runs.</p>
+          <p>Purpose: a repeatable setup that produces a stable p99. This is the number the 4 ms gate is judged on.</p>
         </article>
 
         <article class="card test-card">
           <span class="tag">Real Core reference</span>
           <h3>Production-shaped source path</h3>
-          <p>Real <strong>SAC-6000 LedgerCloseMeta XDR</strong> from <code>stellar-core apply-load</code> through the metadata pipe.</p>
-          <p>Purpose: capture Core's actual burst pattern. About 234 smaller chunks per ledger versus 58 in the controlled source.</p>
+          <p>Real <strong>SAC-6000 LedgerCloseMeta XDR</strong> from <code>stellar-core apply-load</code>, read through Core's metadata pipe.</p>
+          <p>Purpose: check the controlled result against Core's real output pattern &mdash; Core emits about 234 smaller chunks per ledger versus 58 in the controlled source.</p>
         </article>
 
         <article class="card test-card">
           <span class="tag">Controls</span>
-          <h3>Attribution and clock checks</h3>
-          <p>Uncompressed pairs reproduced prior results within 0.1 ms. Reversing the hosts found 37–50 &micro;s of combined clock and direction asymmetry.</p>
-          <p>Raw TCP isolated the 5 Gbit/s one-flow limit from the 12.5 Gbit/s aggregate NIC.</p>
+          <h3>Trust checks on the numbers</h3>
+          <p>Re-running the uncompressed legs reproduced earlier results within 0.1 ms, and swapping the sender and receiver hosts showed only 37&ndash;50 &micro;s of clock error.</p>
+          <p>A raw TCP test confirmed the 5 Gbit/s limit is per connection &mdash; the hosts' full network capacity is 12.5 Gbit/s.</p>
         </article>
       </div>
     </section>
