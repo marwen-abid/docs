@@ -615,7 +615,7 @@
     <section id="arch">
       <h2><span class="num">01</span>Architecture under test</h2>
       <p class="prose">
-        Today Captive Core runs as a subprocess inside RPC's own deployment &mdash; same machine,
+        Today Captive Core runs as a subprocess inside RPC's own deployment: same machine,
         same CPU, memory and NVMe as ingestion and query serving. Moving Core to dedicated
         hardware would let the two scale independently, and one Core could feed several RPC
         nodes. The open question was the cost of the network hop: how much does it add to
@@ -627,8 +627,8 @@
         and keeps the last 10,000 ledgers for catch-up. On the RPC host,
         <code>remoteledger</code> receives the chunks over a WebSocket, reassembles each ledger
         and verifies it. Two targets applied: total delivery must stay inside the PoC budget of
-        80 ms per ledger, and &mdash; once chunking landed mid-experiment &mdash; a stricter
-        transport gate of p99 &le; 4 ms.
+        80 ms per ledger, and once chunking landed mid-experiment, a stricter transport
+        gate of p99 &le; 4 ms.
       </p>
       <p class="sectionnote">
         The PoC client plugs into the same interface RPC ingestion already uses to read ledgers (<code>ledgerbackend.LedgerStream</code>). 
@@ -703,7 +703,7 @@
         <article class="card test-card">
           <span class="tag">Controlled transport gate</span>
           <h3>Repeatable tail measurement</h3>
-          <p><strong>1,000 synthetic ledgers</strong>, 14.48 MiB each, one every 600 ms, emitted over about 8 ms &mdash; the same size and rhythm as the real Core runs.</p>
+          <p><strong>1,000 synthetic ledgers</strong>, 14.48 MiB each, one every 600 ms, emitted over about 8 ms, the same size and rhythm as the real Core runs.</p>
           <p>Purpose: a repeatable setup that produces a stable p99. This is the number the 4 ms gate is judged on.</p>
         </article>
 
@@ -711,14 +711,14 @@
           <span class="tag">Real Core reference</span>
           <h3>Production-shaped source path</h3>
           <p>Real <strong>SAC-6000 LedgerCloseMeta XDR</strong> from <code>stellar-core apply-load</code>, read through Core's metadata pipe.</p>
-          <p>Purpose: check the controlled result against Core's real output pattern &mdash; Core emits about 234 smaller chunks per ledger versus 58 in the controlled source.</p>
+          <p>Purpose: check the controlled result against Core's real output pattern. Core emits about 234 smaller chunks per ledger, versus 58 in the controlled source.</p>
         </article>
 
         <article class="card test-card">
           <span class="tag">Controls</span>
           <h3>Trust checks on the numbers</h3>
           <p>Re-running the uncompressed legs reproduced earlier results within 0.1 ms, and swapping the sender and receiver hosts showed only 37&ndash;50 &micro;s of clock error.</p>
-          <p>A raw TCP test confirmed the 5 Gbit/s limit is per connection &mdash; the hosts' full network capacity is 12.5 Gbit/s.</p>
+          <p>A raw TCP test confirmed the 5 Gbit/s limit is per connection. The hosts' full network capacity is 12.5 Gbit/s.</p>
         </article>
       </div>
     </section>
@@ -775,8 +775,8 @@
     <section id="latency">
       <h2><span class="num">04</span>Latency progression</h2>
       <p class="sectionnote">
-        Runs 1&ndash;2 kept the transport fixed and changed the ledgers &mdash; bigger and heavier
-        each time. Runs 3&ndash;4 kept the heaviest ledger fixed and changed the transport &mdash;
+        Runs 1&ndash;2 kept the transport fixed and changed the ledgers, bigger and heavier
+        each time. Runs 3&ndash;4 kept the heaviest ledger fixed and changed the transport:
         chunking, then compression. The two pairs also measure delivery differently, so each
         gets its own chart; do not compare bars across the two. The right chart uses the
         metric the 4 ms gate is judged against.
@@ -784,7 +784,7 @@
 
       <div class="bars">
         <article class="card">
-          <div class="bar-group-title">Runs 1&ndash;2 &mdash; bigger ledgers, same transport</div>
+          <div class="bar-group-title">Runs 1&ndash;2: bigger ledgers, same transport</div>
           <div class="bar-group-subtitle">Store-and-forward for all three rows; measured from the server's send stamp to client receive</div>
 
           <div class="bar-row">
@@ -806,7 +806,7 @@
         </article>
 
         <article class="card">
-          <div class="bar-group-title">Runs 3&ndash;4 &mdash; same ledger, better transport</div>
+          <div class="bar-group-title">Runs 3&ndash;4: same ledger, better transport</div>
           <div class="bar-group-subtitle">14.48 MiB ledgers for all four rows; measured from Core's last emitted byte to assembled and verified on the client</div>
 
           <div class="bar-row">
@@ -838,11 +838,11 @@
     <section id="model">
       <h2><span class="num">05</span>Why compression closed the gap</h2>
       <p class="sectionnote">
-        Core does not hand over a ledger in one piece &mdash; it streams it out over roughly
+        Core does not hand over a ledger in one piece. It streams it out over roughly
         7.5 ms (measured: 7.28 ms median in Run 3). Because the stream is chunked, the network
         can already send chunks while Core is still producing them. Sending done during those
-        7.5 ms is free. What hurts is whatever is still left to send after Core finishes &mdash;
-        that is the time the client sits waiting.
+        7.5 ms is free. What hurts is whatever is still left to send after Core finishes, because that
+        is the time the client sits waiting.
       </p>
 
       <div class="model">
@@ -853,7 +853,7 @@
           <div class="result">
             Only 7.5 ms of that hides behind Core's own emission.
             <strong class="warn-ink">About 16.8 ms of sending is left after Core finishes.</strong><br>
-            Measured: 16.60 ms (controlled p50) &mdash; the model matches.
+            Measured: 16.60 ms (controlled p50). The model matches.
           </div>
         </article>
 
@@ -997,7 +997,7 @@
       <h2><span class="num">07</span>Validated &amp; still open</h2>
       <p class="sectionnote">
         The GO decision rests on the left column. The right column is real work that
-        integration still has to do &mdash; none of it was in scope for the PoC.
+        integration still has to do. None of it was in scope for the PoC.
       </p>
 
       <div class="closeout">
