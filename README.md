@@ -5,6 +5,7 @@ Published via GitHub Pages at <https://marwen-abid.github.io/docs/>.
 - [A high-level contract layer for the Go SDK · the plan](https://marwen-abid.github.io/docs/go-sdk/contract-layer-plan.html) — `go-sdk/contract-layer-plan.html`
 - [The RPC Benchmark Pipeline](https://marwen-abid.github.io/docs/rpc/benchmark-pipeline.html) — `rpc/benchmark-pipeline.html`
 - [Benchmarking Stellar RPC v2 — the problem](https://marwen-abid.github.io/docs/rpc/benchmarking-problem.html) — `rpc/benchmarking-problem.html`
+- [Remote Captive Core PoC](https://marwen-abid.github.io/docs/rpc/remote-core-poc-results.html) — `rpc/remote-core-poc-results.html`
 - [Stellar RPC — Developer Field Guide](https://marwen-abid.github.io/docs/rpc/rpc-v1-onboarding.html) — `rpc/rpc-v1-onboarding.html`
 - [Stellar RPC V2 — Developer Field Guide](https://marwen-abid.github.io/docs/rpc/rpc-v2-onboarding.html) — `rpc/rpc-v2-onboarding.html`
 - [Benchmarking Stellar RPC v2 — field research &amp; recommendations](https://marwen-abid.github.io/docs/rpc/rpcv2-benchmarking-research.html) — `rpc/rpcv2-benchmarking-research.html`
